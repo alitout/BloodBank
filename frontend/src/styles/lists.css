@@ -1,0 +1,118 @@
+/* ============================================
+   LIST & TABLE STYLES
+   Component: AllRequestsList, PortalAdmin
+   ============================================ */
+
+.list-container {
+  @apply space-y-4;
+}
+
+.list-header {
+  @apply flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between;
+}
+
+.list-search {
+  @apply flex-1 px-4 py-2 border border-slate-300 rounded-lg;
+  @apply focus:outline-none focus:border-red-600 focus:ring-2 focus:ring-red-100;
+}
+
+.list-filters {
+  @apply flex flex-wrap gap-2;
+}
+
+.list-filter-chip {
+  @apply px-3 py-1 rounded-full text-xs font-semibold;
+  @apply border border-slate-300 hover:border-red-600 hover:text-red-600;
+  @apply cursor-pointer transition-colors;
+}
+
+.list-filter-chip.active {
+  @apply bg-red-600 text-white border-red-600;
+}
+
+.list-item-meta {
+  @apply flex gap-2 items-center text-xs text-slate-500;
+}
+
+.list-item-badge {
+  @apply px-2 py-1 rounded text-xs font-semibold;
+}
+
+.list-item-badge.pending {
+  @apply bg-yellow-100 text-yellow-800;
+}
+
+.list-item-badge.fulfilled {
+  @apply bg-green-100 text-green-800;
+}
+
+.list-item-badge.cancelled {
+  @apply bg-red-100 text-red-800;
+}
+
+.list-item-body {
+  @apply space-y-2;
+}
+
+.list-item-row {
+  @apply flex justify-between items-center text-sm;
+}
+
+.list-item-label {
+  @apply font-semibold text-slate-700;
+}
+
+.list-item-value {
+  @apply text-slate-600;
+}
+
+.list-item-footer {
+  @apply flex gap-2 pt-3 border-t border-slate-100;
+}
+
+.list-item-action-btn {
+  @apply flex-1 px-3 py-2 rounded text-xs font-semibold transition-colors;
+  @apply bg-slate-100 hover:bg-slate-200 text-slate-700;
+}
+
+.list-item-action-btn.primary {
+  @apply bg-red-600 hover:bg-red-700 text-white;
+}
+
+.list-item-action-btn.danger {
+  @apply bg-red-100 hover:bg-red-200 text-red-700;
+}
+
+.list-empty {
+  @apply flex flex-col items-center justify-center py-12 text-center;
+}
+
+.list-empty-icon {
+  @apply w-16 h-16 text-slate-300 mb-4;
+}
+
+.list-empty-title {
+  @apply text-lg font-semibold text-slate-600 mb-2;
+}
+
+.list-empty-text {
+  @apply text-slate-500 text-sm;
+}
+
+/* Table Styles */
+.table-wrapper {
+  @apply overflow-x-auto;
+}
+
+.data-table tbody tr:last-child td {
+  @apply border-b-0;
+}
+
+.data-table-action-cell {
+  @apply flex gap-2;
+}
+
+.data-table-action-btn {
+  @apply px-2 py-1 rounded text-xs font-semibold;
+  @apply bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors;
+}

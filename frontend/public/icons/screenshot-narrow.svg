@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 720">
+  <rect fill="#FAF9F6" width="540" height="720"/>
+  <rect fill="#D31C1A" width="540" height="100"/>
+  <text x="270" y="60" font-size="36" font-weight="bold" fill="white" text-anchor="middle" font-family="Arial, sans-serif">Blood Bank</text>
+  
+  <!-- Content illustration -->
+  <rect fill="#E8E8E8" x="20" y="140" width="500" height="120" rx="8"/>
+  <circle cx="60" cy="180" r="30" fill="#D31C1A" opacity="0.3"/>
+  <rect fill="#D31C1A" opacity="0.3" x="110" y="160" width="300" height="15" rx="7"/>
+  <rect fill="#D31C1A" opacity="0.2" x="110" y="185" width="250" height="15" rx="7"/>
+  
+  <rect fill="#E8E8E8" x="20" y="280" width="500" height="120" rx="8"/>
+  <circle cx="60" cy="320" r="30" fill="#D31C1A" opacity="0.2"/>
+  <rect fill="#D31C1A" opacity="0.2" x="110" y="300" width="300" height="15" rx="7"/>
+  <rect fill="#D31C1A" opacity="0.15" x="110" y="325" width="250" height="15" rx="7"/>
+  
+  <rect fill="#E8E8E8" x="20" y="420" width="500" height="120" rx="8"/>
+  <circle cx="60" cy="460" r="30" fill="#D31C1A" opacity="0.15"/>
+  <rect fill="#D31C1A" opacity="0.15" x="110" y="440" width="300" height="15" rx="7"/>
+  <rect fill="#D31C1A" opacity="0.1" x="110" y="465" width="250" height="15" rx="7"/>
+</svg>

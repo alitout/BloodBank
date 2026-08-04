@@ -1,0 +1,145 @@
+/* ============================================
+   LAYOUT & HEADER STYLES
+   Components: App, Header, Footer
+   ============================================ */
+
+/* Header */
+.header-container {
+  @apply max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4;
+}
+
+.header-brand {
+  @apply flex items-center gap-3;
+}
+
+.header-logo {
+  @apply w-12 h-12 md:w-16 md:h-16;
+}
+
+.header-title {
+  @apply text-lg font-black text-slate-900;
+}
+
+.header-subtitle {
+  @apply text-xs text-slate-500;
+}
+
+.header-title-group {
+  @apply text-right;
+}
+
+.header-actions {
+  @apply flex items-center gap-4;
+}
+
+.header-btn {
+  @apply flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-colors;
+}
+
+.header-btn-secondary {
+  @apply header-btn bg-slate-100 hover:bg-slate-200 text-slate-900;
+}
+
+.header-btn-danger {
+  @apply header-btn bg-red-600 hover:bg-red-700 text-white;
+}
+
+/* Footer */
+.footer-container {
+  @apply max-w-6xl mx-auto;
+}
+
+.footer-text {
+  @apply text-slate-400;
+}
+
+.footer-link {
+  @apply text-white hover:text-slate-200 transition-colors;
+}
+
+/* Tab Navigation */
+.tab-navigation {
+  @apply flex gap-2 mb-6 border-b border-slate-200 flex-wrap;
+}
+
+.tab-button {
+  @apply px-4 py-2 font-semibold text-sm transition-colors;
+}
+
+.tab-button-active {
+  @apply tab-button text-red-600 border-b-2 border-red-600;
+}
+
+.tab-button-inactive {
+  @apply tab-button text-slate-600 hover:text-slate-900;
+}
+
+.tab-button:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+/* Content Sections */
+.content-section {
+  @apply space-y-6;
+}
+
+.section-header {
+  @apply border-b border-slate-200 pb-4 mb-6;
+}
+
+.section-title {
+  @apply text-2xl font-bold text-slate-900 mb-2;
+}
+
+.section-description {
+  @apply text-slate-600 text-sm;
+}
+
+/* Page Container */
+.page-container {
+  @apply max-w-6xl mx-auto w-full;
+}
+
+/* Centered Content */
+.center-content {
+  @apply flex flex-col items-center justify-center;
+}
+
+/* Side Navigation */
+.sidebar {
+  @apply w-64 bg-white border-r border-slate-200 p-6 h-screen overflow-y-auto;
+}
+
+.sidebar-item {
+  @apply px-4 py-2 rounded-lg text-slate-700 hover:bg-slate-100 transition-colors mb-2;
+}
+
+.sidebar-item.active {
+  @apply bg-red-100 text-red-700 font-semibold;
+}
+
+/* Responsive Grid */
+.layout-grid {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6;
+}
+
+.layout-grid-2 {
+  @apply grid grid-cols-1 md:grid-cols-2 gap-6;
+}
+
+/* Spacing Utilities */
+.spacing-xs {
+  @apply space-y-2;
+}
+
+.spacing-sm {
+  @apply space-y-4;
+}
+
+.spacing-md {
+  @apply space-y-6;
+}
+
+.spacing-lg {
+  @apply space-y-8;
+}

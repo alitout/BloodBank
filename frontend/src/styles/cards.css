@@ -1,0 +1,145 @@
+/* ============================================
+   CARD & PORTAL STYLES
+   Components: PortalDonor, PortalHospital, PortalAdmin
+   ============================================ */
+
+.portal-container {
+  @apply space-y-6;
+}
+
+.portal-header {
+  @apply border-b border-slate-200 pb-4 mb-6;
+}
+
+.portal-title {
+  @apply text-2xl font-bold text-slate-900 mb-2;
+}
+
+.portal-description {
+  @apply text-slate-600 text-sm;
+}
+
+.portal-content {
+  @apply space-y-6;
+}
+
+/* Cards for Donors/Hospitals */
+.info-card-meta {
+  @apply flex gap-2 items-center text-sm;
+}
+
+.info-card-content {
+  @apply space-y-3;
+}
+
+.info-card-row {
+  @apply flex justify-between items-center text-sm;
+}
+
+.info-card-label {
+  @apply font-semibold text-slate-700;
+}
+
+.info-card-value {
+  @apply text-slate-600;
+}
+
+.info-card-footer {
+  @apply flex gap-2 pt-4 border-t border-slate-100;
+}
+
+.info-card-action {
+  @apply flex-1 px-3 py-2 rounded text-sm font-semibold transition-colors;
+  @apply bg-slate-100 hover:bg-slate-200 text-slate-700;
+}
+
+.info-card-action.primary {
+  @apply bg-red-600 hover:bg-red-700 text-white;
+}
+
+/* Appointment Cards */
+.appointment-card {
+  @apply bg-white rounded-lg shadow-sm p-4 border-l-4 border-blue-500;
+  @apply hover:shadow-md transition-all;
+}
+
+.appointment-card-header {
+  @apply flex justify-between items-start mb-2;
+}
+
+.appointment-card-date {
+  @apply text-sm font-semibold text-slate-900;
+}
+
+.appointment-card-time {
+  @apply text-xs text-slate-500;
+}
+
+.appointment-card-body {
+  @apply space-y-1;
+}
+
+.appointment-card-info {
+  @apply text-sm text-slate-600;
+}
+
+/* Grid Layouts */
+.cards-grid {
+  @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4;
+}
+
+.cards-grid-2 {
+  @apply grid grid-cols-1 md:grid-cols-2 gap-4;
+}
+
+/* Tab Panels */
+.tab-panel-header {
+  @apply flex justify-between items-center mb-4;
+}
+
+.tab-panel-title {
+  @apply text-xl font-bold text-slate-900;
+}
+
+.tab-panel-action {
+  @apply px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition-colors;
+}
+
+/* Metrics Display */
+.metric-card {
+  @apply bg-white rounded-lg shadow-md p-6 border border-slate-100;
+  @apply text-center;
+}
+
+.metric-value {
+  @apply text-4xl font-bold text-red-600 mb-1;
+}
+
+.metric-label {
+  @apply text-sm font-semibold text-slate-600;
+}
+
+.metric-icon {
+  @apply w-12 h-12 mx-auto mb-3 text-slate-300;
+}
+
+/* Status Indicator */
+.status-indicator {
+  @apply flex items-center gap-2 text-sm;
+}
+
+.status-dot {
+  @apply w-2.5 h-2.5 rounded-full;
+}
+
+.status-dot.online {
+  @apply bg-green-500 animate-pulse;
+}
+
+.status-dot.offline {
+  @apply bg-slate-400;
+}
+
+.status-dot.busy {
+  @apply bg-yellow-500;
+}
