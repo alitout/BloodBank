@@ -66,12 +66,28 @@ export const AssignedRequests = () => {
     }
   };
 
-  const handleCompleteDonation = async (requestId) => {
-    if (!window.confirm(
-      language === "ar"
-        ? "هل تريد تأكيد إتمام التبرع؟"
-        : "Are you sure you want to confirm the donation as completed?"
-    )) {
+  const handleCompleteDonation = async (request) => {
+    const requestId = request?._id;
+
+    if (!requestId) {
+      setError(
+        language === "ar"
+          ? "معرّف الطلب غير موجود."
+          : "Request ID is missing."
+      );
+      return;
+    }
+
+    const confirmationMessage =
+      request.confirmationStatus === "rejected"
+        ? language === "ar"
+          ? "تم رفض التأكيد السابق. هل تريد إرسال تأكيد جديد للإدارة؟"
+          : "The previous confirmation was rejected. Submit a new confirmation?"
+        : language === "ar"
+          ? "هل تؤكد أنك أتممت التبرع؟ سيتم إرسال التأكيد إلى الإدارة للموافقة."
+          : "Do you confirm that you completed the donation? It will be sent to an administrator for approval.";
+
+    if (!window.confirm(confirmationMessage)) {
       return;
     }
 
@@ -79,42 +95,175 @@ export const AssignedRequests = () => {
       setProcessingId(requestId);
       setError("");
       setSuccess("");
+
       const token = getAccessToken();
-      if (!token) throw new Error('No authentication token found.');
 
-      const response = await fetch(
-        `${API_BASE_URL}/requesters/${requestId}/complete-donation`,
-        {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to complete donation");
+      if (!token) {
+        throw new Error(
+          language === "ar"
+            ? "انتهت جلسة الدخول. يرجى تسجيل الدخول مجدداً."
+            : "Authentication session is missing. Please log in again."
+        );
       }
 
-      const responseData = await response.json();
-      const unitsCompleted = responseData.myAssignment?.unitsCompleted || 1;
+      let donation =
+        request.donation || null;
+
+      if (
+        !donation ||
+        request.confirmationStatus ===
+        "not_confirmed" ||
+        request.confirmationStatus ===
+        "rejected"
+      ) {
+        const createResponse =
+          await fetch(
+            `${API_BASE_URL}/donations/request/${requestId}`,
+            {
+              method: "POST",
+              headers: {
+                Authorization:
+                  `Bearer ${token}`,
+                "Content-Type":
+                  "application/json",
+                Accept:
+                  "application/json",
+              },
+            }
+          );
+
+        const createData =
+          await createResponse.json();
+
+        if (!createResponse.ok) {
+          if (
+            createResponse.status ===
+            409 &&
+            createData?.donation
+          ) {
+            donation =
+              createData.donation;
+          } else {
+            throw new Error(
+              createData?.error ||
+              (language === "ar"
+                ? "تعذر إنشاء سجل التبرع."
+                : "Failed to create the donation record.")
+            );
+          }
+        } else {
+          donation =
+            createData?.donation;
+        }
+      }
+
+      if (!donation?.donationId) {
+        throw new Error(
+          language === "ar"
+            ? "لم يُرجع الخادم معرّف التبرع."
+            : "The server did not return a donation ID."
+        );
+      }
+
+      /*
+       * Do not submit again when already pending.
+       */
+      if (
+        donation.status ===
+        "pending_admin_approval"
+      ) {
+        setSuccess(
+          language === "ar"
+            ? "تم إرسال تأكيد التبرع مسبقاً، وهو بانتظار موافقة الإدارة."
+            : "This donation was already submitted and is waiting for administrator approval."
+        );
+
+        setRequests((currentRequests) =>
+          currentRequests.map(
+            (currentRequest) =>
+              currentRequest._id ===
+                requestId
+                ? {
+                  ...currentRequest,
+                  donation,
+                  confirmationStatus:
+                    "pending_admin_approval",
+                  canConfirm: false,
+                  waitingForAdmin: true,
+                  rejected: false,
+                  rejectionReason: null,
+                }
+                : currentRequest
+          )
+        );
+
+        return;
+      }
+
+      /*
+       * Submit for admin approval only when not already pending.
+       */
+      const confirmResponse =
+        await fetch(
+          `${API_BASE_URL}/donations/${donation.donationId}/complete`,
+          {
+            method: "PATCH",
+            headers: {
+              Authorization:
+                `Bearer ${token}`,
+              "Content-Type":
+                "application/json",
+              Accept:
+                "application/json",
+            },
+          }
+        );
+
+      const confirmData =
+        await confirmResponse.json();
+
+      if (!confirmResponse.ok) {
+        throw new Error(
+          confirmData?.error ||
+          (language === "ar"
+            ? "تعذر إرسال تأكيد التبرع."
+            : "Failed to submit the donation confirmation.")
+        );
+      }
 
       setSuccess(
         language === "ar"
-          ? `✓ تم تأكيد ${unitsCompleted} وحدة بنجاح! سيتم نقلك إلى قائمة السجل في ثوان قليلة...`
-          : `✓ ${unitsCompleted} unit(s) completed successfully! You will be redirected in a few seconds...`
+          ? "تم إرسال تأكيد التبرع إلى الإدارة. الطلب الآن بانتظار الموافقة."
+          : "Donation confirmation was sent to the administrator and is waiting for approval."
       );
 
-      // Remove the completed request from the list immediately
-      setRequests(requests.filter(req => req._id !== requestId));
+      /*
+       * Update this card immediately rather than reloading
+       * the entire application.
+       */
+      setRequests((currentRequests) =>
+        currentRequests.map((currentRequest) =>
+          currentRequest._id === requestId
+            ? {
+              ...currentRequest,
+              donation: confirmData.donation,
+              confirmationStatus: "pending_admin_approval",
+              canConfirm: false,
+              waitingForAdmin: true,
+              rejected: false,
+              rejectionReason: null,
+            }
+            : currentRequest
+        )
+      );
 
-      // Reload page after 3 seconds to refresh user profile data
-      setTimeout(() => {
-        window.location.reload();
-      }, 3000);
+      await fetchAssignedRequests();
     } catch (err) {
+      console.error(
+        "[ASSIGNED REQUESTS] Confirm donation error:",
+        err
+      );
+
       setError(err.message);
     } finally {
       setProcessingId(null);
@@ -326,9 +475,9 @@ export const AssignedRequests = () => {
               )}
 
               {/* Actions */}
-              <div className="flex gap-3 p-4 border-t border-slate-200 bg-slate-50">
+              {/* <div className="flex gap-3 p-4 border-t border-slate-200 bg-slate-50">
                 <button
-                  onClick={() => handleCompleteDonation(request._id)}
+                  onClick={() => handleCompleteDonation(request)}
                   disabled={processingId === request._id}
                   className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
                 >
@@ -345,6 +494,117 @@ export const AssignedRequests = () => {
                   <XCircle className="w-4 h-4" />
                   {language === "ar" ? "إلغاء" : "Cancel"}
                 </button>
+
+              </div> */}
+              {request.description && (
+                <div className="px-4 py-3 border-t border-slate-200 bg-white">
+                  <p className="text-xs text-slate-600 mb-1">
+                    {language === "ar" ? "الملاحظات" : "Notes"}
+                  </p>
+
+                  <p className="text-slate-700">
+                    {request.description}
+                  </p>
+                </div>
+              )}
+
+              {/* Replace the old Confirm/Cancel block with this */}
+              <div className="border-t border-slate-200 bg-white p-4">
+                {request.confirmationStatus === "pending_admin_approval" ? (
+                  <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-yellow-600" />
+
+                      <div>
+                        <p className="font-semibold text-yellow-800">
+                          {language === "ar"
+                            ? "بانتظار موافقة الإدارة"
+                            : "Waiting for Administrator Approval"}
+                        </p>
+
+                        <p className="mt-1 text-sm text-yellow-700">
+                          {language === "ar"
+                            ? "تم إرسال تأكيد إتمام التبرع. لن يُحتسب التبرع حتى توافق الإدارة."
+                            : "Your completion confirmation was submitted. The donation will not be counted until an administrator approves it."}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {request.confirmationStatus === "rejected" && (
+                      <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4">
+                        <div className="flex items-start gap-3">
+                          <XCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600" />
+
+                          <div>
+                            <p className="font-semibold text-red-800">
+                              {language === "ar"
+                                ? "تم رفض تأكيد التبرع"
+                                : "Donation Confirmation Rejected"}
+                            </p>
+
+                            <p className="mt-1 text-sm text-red-700">
+                              {request.rejectionReason ||
+                                (language === "ar"
+                                  ? "لم يتم تقديم سبب."
+                                  : "No reason was provided.")}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex flex-col gap-3 sm:flex-row">
+                      <button
+                        type="button"
+                        onClick={() => handleCompleteDonation(request)}
+                        disabled={
+                          processingId === request._id ||
+                          request.canConfirm === false
+                        }
+                        className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2 font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {processingId === request._id ? (
+                          <>
+                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+
+                            {language === "ar"
+                              ? "جارٍ الإرسال..."
+                              : "Submitting..."}
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle className="h-5 w-5" />
+
+                            {request.confirmationStatus === "rejected"
+                              ? language === "ar"
+                                ? "إعادة تأكيد التبرع"
+                                : "Confirm Again"
+                              : language === "ar"
+                                ? "تأكيد إتمام التبرع"
+                                : "Confirm Donation"}
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleCancelAssignment(request._id)
+                        }
+                        disabled={processingId === request._id}
+                        className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-100 px-4 py-2 font-semibold text-red-700 hover:bg-red-200 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <XCircle className="h-5 w-5" />
+
+                        {language === "ar"
+                          ? "إلغاء التعيين"
+                          : "Cancel Assignment"}
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           ))}

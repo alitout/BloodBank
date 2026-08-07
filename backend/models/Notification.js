@@ -5,13 +5,11 @@ const notificationSchema = new mongoose.Schema({
         type: String,
         required: true,
         indexed: true,
-        description: "UID of the donor receiving the notification"
     },
     requestId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Request',
         required: true,
-        description: "Reference to the blood request"
     },
     type: {
         type: String,
@@ -24,33 +22,47 @@ const notificationSchema = new mongoose.Schema({
             'donation_rejected'
         ],
         default: 'request_available',
-        description: "Type of notification"
     },
     title: {
         type: String,
         required: true,
-        description: "Notification title"
     },
     message: {
         type: String,
         required: true,
-        description: "Notification message"
     },
     read: {
         type: Boolean,
         default: false,
         indexed: true,
-        description: "Whether the donor has read this notification"
     },
+    donationId: {
+        type: String,
+        default: null,
+    },
+
+    adminId: {
+        type: String,
+        default: null,
+    },
+
     actionTaken: {
         type: Boolean,
         default: false,
-        description: "Whether donor has assigned themselves or ignored"
+    },
+
+    action: {
+        type: String,
+        enum: [
+            "approved",
+            "rejected",
+            null,
+        ],
+        default: null,
     },
     assignedByThisNotification: {
         type: Boolean,
         default: false,
-        description: "Whether this notification resulted in assignment"
     },
     createdAt: {
         type: Date,
@@ -64,8 +76,8 @@ const notificationSchema = new mongoose.Schema({
     expiresAt: {
         type: Date,
         default: () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-        description: "When this notification expires (auto-delete)"
-    }
+    },
+
 }, { timestamps: true });
 
 // Index for efficient querying

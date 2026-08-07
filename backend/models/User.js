@@ -45,6 +45,10 @@ const userSchema = new mongoose.Schema({
         type: Date,
         default: null
     },
+    nextEligibleDate: {
+        type: Date,
+        default: null
+    },
     donationCount: {
         type: Number,
         default: 0,

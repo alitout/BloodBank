@@ -1,132 +1,674 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import {
+  Bell,
+  CheckCircle,
+  Clock,
+  Droplet,
+  XCircle,
+} from "lucide-react";
+
 import { useLanguage } from "./LanguageContext.jsx";
 import { useAuth } from "./AuthContext.jsx";
-import { API_BASE_URL, getAccessToken } from "../utils/api.js";
-import { Bell, CheckCircle, Clock } from "lucide-react";
+import {
+  API_BASE_URL,
+  getAccessToken,
+} from "../utils/api.js";
 
-export const NotificationBell = ({ isMobilePanel = false }) => {
+export const NotificationBell = ({
+  isMobilePanel = false,
+}) => {
   const { language } = useLanguage();
   const { accessToken } = useAuth();
-  const [pendingCount, setPendingCount] = useState(0);
-  const [showDropdown, setShowDropdown] = useState(isMobilePanel ? true : false);
-  const [pendingAccounts, setPendingAccounts] = useState([]);
+
+  const [pendingAccounts, setPendingAccounts] =
+    useState([]);
+
+  const [
+    pendingDonations,
+    setPendingDonations,
+  ] = useState([]);
+
+  const [showDropdown, setShowDropdown] =
+    useState(isMobilePanel);
+
+  const [processingId, setProcessingId] =
+    useState(null);
+
+  const [error, setError] =
+    useState("");
+
   const dropdownRef = useRef(null);
 
-  useEffect(() => {
-    const interval = setInterval(fetchPendingAccounts, 5000);
-    fetchPendingAccounts();
-    return () => clearInterval(interval);
-  }, []);
+  const pendingCount =
+    pendingAccounts.length +
+    pendingDonations.length;
+
+  const fetchPendingData =
+    useCallback(async () => {
+      const token =
+        getAccessToken() ||
+        accessToken;
+
+      if (!token) {
+        return;
+      }
+
+      try {
+        setError("");
+
+        const [
+          accountsResponse,
+          donationsResponse,
+        ] = await Promise.all([
+          fetch(
+            `${API_BASE_URL}/auth/admin/accounts`,
+            {
+              method: "GET",
+              headers: {
+                Authorization:
+                  `Bearer ${token}`,
+                Accept:
+                  "application/json",
+              },
+            }
+          ),
+
+          fetch(
+            `${API_BASE_URL}/donations/admin/pending`,
+            {
+              method: "GET",
+              headers: {
+                Authorization:
+                  `Bearer ${token}`,
+                Accept:
+                  "application/json",
+              },
+            }
+          ),
+        ]);
+
+        /*
+         * Pending account verification
+         */
+        if (accountsResponse.ok) {
+          const accountsData =
+            await accountsResponse.json();
+
+          const unverifiedAccounts =
+            Array.isArray(accountsData)
+              ? accountsData.filter(
+                (account) =>
+                  !account.verifiedByAdmin
+              )
+              : [];
+
+          setPendingAccounts(
+            unverifiedAccounts
+          );
+        }
+
+        /*
+         * Pending donation confirmations
+         */
+        if (donationsResponse.ok) {
+          const donationsData =
+            await donationsResponse.json();
+
+          setPendingDonations(
+            Array.isArray(donationsData)
+              ? donationsData
+              : donationsData.donations ||
+              []
+          );
+        }
+
+        if (
+          !accountsResponse.ok &&
+          !donationsResponse.ok
+        ) {
+          throw new Error(
+            language === "ar"
+              ? "تعذر تحميل الإشعارات."
+              : "Failed to load notifications."
+          );
+        }
+      } catch (fetchError) {
+        console.error(
+          "[NOTIFICATION BELL] Fetch error:",
+          fetchError
+        );
+
+        setError(fetchError.message);
+      }
+    }, [accessToken, language]);
 
   useEffect(() => {
-    if (isMobilePanel) return; // Skip click outside handler for mobile panel
-    
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+    if (!accessToken) {
+      return undefined;
+    }
+
+    fetchPendingData();
+
+    const intervalId =
+      window.setInterval(
+        fetchPendingData,
+        10000
+      );
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [
+    accessToken,
+    fetchPendingData,
+  ]);
+
+  useEffect(() => {
+    if (isMobilePanel) {
+      return undefined;
+    }
+
+    const handleClickOutside = (
+      event
+    ) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(
+          event.target
+        )
+      ) {
         setShowDropdown(false);
       }
     };
 
     if (showDropdown) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
+      document.addEventListener(
+        "mousedown",
+        handleClickOutside
+      );
     }
-  }, [showDropdown, isMobilePanel]);
 
-  const fetchPendingAccounts = async () => {
-    try {
-      const token = getAccessToken();
-      if (!token) return;
-      const response = await fetch(`${API_BASE_URL}/auth/admin/accounts`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (!response.ok) return;
-      const data = await response.json();
-      const pending = Array.isArray(data)
-        ? data.filter((acc) => !acc.verifiedByAdmin)
-        : [];
-      setPendingCount(pending.length);
-      setPendingAccounts(pending.slice(0, 5));
-    } catch (err) {
-      console.error("Error fetching pending accounts:", err);
-    }
-  };
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        handleClickOutside
+      );
+    };
+  }, [
+    isMobilePanel,
+    showDropdown,
+  ]);
 
-  const handleVerify = async (uid) => {
-    try {
-      const token = getAccessToken();
-      if (!token) throw new Error('No authentication token found.');
-      const response = await fetch(`${API_BASE_URL}/auth/admin/verify/${uid}`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ verifiedByAdmin: true }),
-      });
-      if (!response.ok) throw new Error("Failed to verify");
-      fetchPendingAccounts();
-    } catch (err) {
-      console.error("Error verifying account:", err);
-    }
-  };
+  const handleVerifyAccount =
+    async (uid) => {
+      try {
+        setProcessingId(uid);
+        setError("");
+
+        const token =
+          getAccessToken() ||
+          accessToken;
+
+        if (!token) {
+          throw new Error(
+            "Authentication required"
+          );
+        }
+
+        const response = await fetch(
+          `${API_BASE_URL}/auth/admin/verify/${uid}`,
+          {
+            method: "PATCH",
+            headers: {
+              Authorization:
+                `Bearer ${token}`,
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              verifiedByAdmin: true,
+            }),
+          }
+        );
+
+        const data =
+          await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data?.error ||
+            "Failed to verify account"
+          );
+        }
+
+        setPendingAccounts(
+          (currentAccounts) =>
+            currentAccounts.filter(
+              (account) =>
+                account.uid !== uid
+            )
+        );
+      } catch (verifyError) {
+        setError(
+          verifyError.message
+        );
+      } finally {
+        setProcessingId(null);
+      }
+    };
+
+  const handleApproveDonation =
+    async (donationId) => {
+      const approved =
+        window.confirm(
+          language === "ar"
+            ? "هل تريد الموافقة على إتمام هذا التبرع؟"
+            : "Approve this donation completion?"
+        );
+
+      if (!approved) {
+        return;
+      }
+
+      try {
+        setProcessingId(
+          donationId
+        );
+
+        setError("");
+
+        const token =
+          getAccessToken() ||
+          accessToken;
+
+        if (!token) {
+          throw new Error(
+            "Authentication required"
+          );
+        }
+
+        const response = await fetch(
+          `${API_BASE_URL}/donations/admin/${donationId}/approve`,
+          {
+            method: "PATCH",
+            headers: {
+              Authorization:
+                `Bearer ${token}`,
+              "Content-Type":
+                "application/json",
+              Accept:
+                "application/json",
+            },
+          }
+        );
+
+        const data =
+          await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data?.error ||
+            "Failed to approve donation"
+          );
+        }
+
+        setPendingDonations(
+          (currentDonations) =>
+            currentDonations.filter(
+              (donation) =>
+                donation.donationId !==
+                donationId
+            )
+        );
+
+        /*
+         * Refresh both the bell and any other
+         * pending data after approval.
+         */
+        window.dispatchEvent(
+          new CustomEvent(
+            "pending-donations-updated"
+          )
+        );
+      } catch (approveError) {
+        console.error(
+          "[NOTIFICATION BELL] Approval error:",
+          approveError
+        );
+
+        setError(
+          approveError.message
+        );
+      } finally {
+        setProcessingId(null);
+      }
+    };
+
+  const handleRejectDonation =
+    async (donationId) => {
+      const rejectionReason =
+        window.prompt(
+          language === "ar"
+            ? "اكتب سبب رفض تأكيد التبرع:"
+            : "Enter the rejection reason:"
+        );
+
+      if (
+        rejectionReason === null
+      ) {
+        return;
+      }
+
+      const trimmedReason =
+        rejectionReason.trim();
+
+      if (!trimmedReason) {
+        setError(
+          language === "ar"
+            ? "سبب الرفض مطلوب."
+            : "A rejection reason is required."
+        );
+
+        return;
+      }
+
+      try {
+        setProcessingId(
+          donationId
+        );
+
+        setError("");
+
+        const token =
+          getAccessToken() ||
+          accessToken;
+
+        if (!token) {
+          throw new Error(
+            "Authentication required"
+          );
+        }
+
+        const response = await fetch(
+          `${API_BASE_URL}/donations/admin/${donationId}/reject`,
+          {
+            method: "PATCH",
+            headers: {
+              Authorization:
+                `Bearer ${token}`,
+              "Content-Type":
+                "application/json",
+              Accept:
+                "application/json",
+            },
+            body: JSON.stringify({
+              rejectionReason:
+                trimmedReason,
+            }),
+          }
+        );
+
+        const data =
+          await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data?.error ||
+            "Failed to reject donation"
+          );
+        }
+
+        setPendingDonations(
+          (currentDonations) =>
+            currentDonations.filter(
+              (donation) =>
+                donation.donationId !==
+                donationId
+            )
+        );
+
+        window.dispatchEvent(
+          new CustomEvent(
+            "pending-donations-updated"
+          )
+        );
+      } catch (rejectError) {
+        console.error(
+          "[NOTIFICATION BELL] Rejection error:",
+          rejectError
+        );
+
+        setError(
+          rejectError.message
+        );
+      } finally {
+        setProcessingId(null);
+      }
+    };
 
   return (
-    <div ref={dropdownRef}>
+    <div
+      ref={dropdownRef}
+      className="relative"
+    >
       {!isMobilePanel && (
         <button
-          onClick={() => setShowDropdown(!showDropdown)}
+          type="button"
+          onClick={() =>
+            setShowDropdown(
+              (current) => !current
+            )
+          }
           className="relative p-2 text-slate-600 hover:text-slate-900"
+          aria-label={
+            language === "ar"
+              ? "الإشعارات"
+              : "Notifications"
+          }
         >
-          <Bell className="w-5 h-5" />
+          <Bell className="h-5 w-5" />
+
           {pendingCount > 0 && (
-            <span className="absolute top-0 right-0 bg-red-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-              {pendingCount}
+            <span className="absolute right-0 top-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-xs text-white">
+              {pendingCount > 99
+                ? "99+"
+                : pendingCount}
             </span>
           )}
         </button>
       )}
 
       {showDropdown && (
-        <div className={isMobilePanel ? "w-full bg-white" : "absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-slate-200 z-50 max-h-96 overflow-y-auto"}>
-          <div className="p-4 border-b border-slate-200">
+        <div
+          className={
+            isMobilePanel
+              ? "w-full bg-white"
+              : "absolute right-0 z-50 mt-2 max-h-[32rem] w-96 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg"
+          }
+        >
+          <div className="border-b border-slate-200 p-4">
             <h3 className="font-bold text-slate-900">
-              {language === "ar" ? "الإشعارات" : "Notifications"}
+              {language === "ar"
+                ? "الإشعارات المعلقة"
+                : "Pending Notifications"}
             </h3>
-            <p className="text-xs text-slate-500">
-              {pendingCount} {language === "ar" ? "انتظار التحقق" : "Pending Verification"}
+
+            <p className="mt-1 text-xs text-slate-500">
+              {language === "ar"
+                ? `${pendingCount} عنصر بانتظار الإجراء`
+                : `${pendingCount} item(s) waiting for action`}
             </p>
           </div>
 
+          {error && (
+            <div className="border-b border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
           <div className="divide-y divide-slate-200">
-            {pendingAccounts.length > 0 ? (
-              pendingAccounts.map((account) => (
-                <div key={account.uid} className="p-3 hover:bg-slate-50">
+            {/* Pending donation confirmations */}
+            {pendingDonations.map(
+              (donation) => {
+                const donor =
+                  donation.donor || {};
+
+                const request =
+                  donation.requestId ||
+                  {};
+
+                const isProcessing =
+                  processingId ===
+                  donation.donationId;
+
+                return (
+                  <div
+                    key={
+                      donation._id ||
+                      donation.donationId
+                    }
+                    className="p-4 hover:bg-slate-50"
+                  >
+                    <div className="flex items-start gap-3">
+                      <Droplet className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600" />
+
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-slate-900">
+                          {language === "ar"
+                            ? "تأكيد تبرع بانتظار الموافقة"
+                            : "Donation confirmation awaiting approval"}
+                        </p>
+
+                        <p className="mt-1 text-sm text-slate-700">
+                          {donor.fname}{" "}
+                          {donor.lname}
+                        </p>
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          {request.hospital ||
+                            "—"}
+                          {" • "}
+                          {donation.unitsCompleted ||
+                            donation.unitsAssigned ||
+                            0}{" "}
+                          {language === "ar"
+                            ? "وحدة"
+                            : "unit(s)"}
+                        </p>
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          {language === "ar"
+                            ? "المريض: "
+                            : "Patient: "}
+
+                          {request.fname}{" "}
+                          {request.lname}
+                        </p>
+
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleApproveDonation(
+                                donation.donationId
+                              )
+                            }
+                            disabled={
+                              isProcessing
+                            }
+                            className="flex items-center gap-1 rounded bg-green-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+                          >
+                            <CheckCircle className="h-4 w-4" />
+
+                            {language === "ar"
+                              ? "موافقة"
+                              : "Approve"}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleRejectDonation(
+                                donation.donationId
+                              )
+                            }
+                            disabled={
+                              isProcessing
+                            }
+                            className="flex items-center gap-1 rounded bg-red-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                          >
+                            <XCircle className="h-4 w-4" />
+
+                            {language === "ar"
+                              ? "رفض"
+                              : "Reject"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+            )}
+
+            {/* Pending account verification */}
+            {pendingAccounts.map(
+              (account) => (
+                <div
+                  key={account.uid}
+                  className="p-4 hover:bg-slate-50"
+                >
                   <div className="flex items-start gap-3">
-                    <Clock className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                    <Clock className="mt-0.5 h-5 w-5 flex-shrink-0 text-yellow-600" />
+
                     <div className="flex-1">
-                      <p className="font-semibold text-sm text-slate-900">
+                      <p className="text-sm font-semibold text-slate-900">
+                        {language === "ar"
+                          ? "حساب بانتظار التحقق"
+                          : "Account awaiting verification"}
+                      </p>
+
+                      <p className="mt-1 text-sm text-slate-700">
                         {account.email}
                       </p>
-                      <p className="text-xs text-slate-500">{account.role}</p>
+
+                      <p className="text-xs text-slate-500">
+                        {account.role}
+                      </p>
+
                       <button
-                        onClick={() => {
-                          handleVerify(account.uid);
-                          if (!isMobilePanel) setShowDropdown(false);
-                        }}
-                        className="mt-2 bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700"
+                        type="button"
+                        onClick={() =>
+                          handleVerifyAccount(
+                            account.uid
+                          )
+                        }
+                        disabled={
+                          processingId ===
+                          account.uid
+                        }
+                        className="mt-2 rounded bg-green-600 px-3 py-1 text-xs text-white hover:bg-green-700 disabled:opacity-50"
                       >
-                        {language === "ar" ? "التحقق الآن" : "Verify Now"}
+                        {language === "ar"
+                          ? "التحقق الآن"
+                          : "Verify Now"}
                       </button>
                     </div>
                   </div>
                 </div>
-              ))
-            ) : (
-              <div className="p-4 text-center text-slate-500 text-sm">
-                {language === "ar" ? "لا توجد إشعارات" : "No notifications"}
+              )
+            )}
+
+            {pendingCount === 0 && (
+              <div className="p-5 text-center text-sm text-slate-500">
+                {language === "ar"
+                  ? "لا توجد إشعارات معلقة"
+                  : "No pending notifications"}
               </div>
             )}
           </div>

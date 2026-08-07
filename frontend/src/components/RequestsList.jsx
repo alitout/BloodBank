@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useLanguage } from "./LanguageContext.jsx";
 import { useAuth } from "./AuthContext.jsx";
 import { useDB } from "./DBContext.jsx";
@@ -9,7 +9,7 @@ import { Heart, Loader, AlertCircle, Check, Droplet, MapPin, Users, Search, Filt
 
 export const RequestsList = () => {
   const { t, language } = useLanguage();
-  const { accessToken, user } = useAuth();
+  const { accessToken, user, refreshUserProfile } = useAuth();
   const { requesters } = useDB();
   const { getCachedData } = useDataCache();
   const navigate = useNavigate();
@@ -24,7 +24,86 @@ export const RequestsList = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [bloodTypeFilter, setBloodTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [remainingDays, setRemainingDays] = useState(0);
+
+  const cooldownInformation = useMemo(() => {
+    if (
+      user?.status !== "cool-down" ||
+      !user?.nextEligibleDate
+    ) {
+      return {
+        isInCoolDown: false,
+        nextEligibleDate: null,
+        remainingDays: 0,
+        formattedNextEligibleDate: null,
+      };
+    }
+
+    const nextEligibleDate = new Date(
+      user.nextEligibleDate
+    );
+
+    if (
+      Number.isNaN(
+        nextEligibleDate.getTime()
+      )
+    ) {
+      return {
+        isInCoolDown: false,
+        nextEligibleDate: null,
+        remainingDays: 0,
+        formattedNextEligibleDate: null,
+      };
+    }
+
+    const difference =
+      nextEligibleDate.getTime() -
+      Date.now();
+
+    if (difference <= 0) {
+      return {
+        isInCoolDown: false,
+        nextEligibleDate,
+        remainingDays: 0,
+        formattedNextEligibleDate: null,
+      };
+    }
+
+    return {
+      isInCoolDown: true,
+
+      nextEligibleDate,
+
+      remainingDays: Math.max(
+        1,
+        Math.ceil(
+          difference /
+          (24 * 60 * 60 * 1000)
+        )
+      ),
+
+      formattedNextEligibleDate:
+        nextEligibleDate.toLocaleDateString(
+          language === "ar"
+            ? "ar-LB"
+            : "en-GB",
+          {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          }
+        ),
+    };
+  }, [
+    user?.status,
+    user?.nextEligibleDate,
+    language,
+  ]);
+
+  const {
+    isInCoolDown,
+    remainingDays,
+    formattedNextEligibleDate,
+  } = cooldownInformation;
 
   // Check cache first and load initial data
   useEffect(() => {
@@ -34,16 +113,26 @@ export const RequestsList = () => {
     }
   }, [user?.role, getCachedData]);
 
-  // Calculate remaining cool-down days
   useEffect(() => {
-    if (user?.status === "cool-down" && user?.lastDonationDate) {
-      const lastDonation = new Date(user.lastDonationDate);
-      const coolDownEnd = new Date(lastDonation.getTime() + 56 * 24 * 60 * 60 * 1000);
-      const today = new Date();
-      const daysRemaining = Math.ceil((coolDownEnd - today) / (1000 * 60 * 60 * 24));
-      setRemainingDays(Math.max(0, daysRemaining));
+    if (
+      typeof refreshUserProfile !==
+      "function"
+    ) {
+      return undefined;
     }
-  }, [user]);
+
+    refreshUserProfile();
+
+    const intervalId =
+      window.setInterval(() => {
+        refreshUserProfile();
+      }, 15000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [refreshUserProfile]);
+
 
   // Blood type compatibility check
   const isCompatibleDonor = (requiredBloodType, donorBloodType) => {
@@ -175,19 +264,35 @@ export const RequestsList = () => {
       )}
 
       {/* Cool-down Status Warning */}
-      {user?.status === "cool-down" && (
-        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-orange-600 flex-shrink-0" />
+      {isInCoolDown && (
+        <div className="flex items-start gap-3 rounded-lg border border-orange-200 bg-orange-50 p-4">
+          <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-orange-600" />
+
           <div>
-            <p className="text-orange-800 font-semibold text-sm">
-              {language === "ar" ? "فترة انتظار نشطة" : "Waiting Period Active"}
-            </p>
-            <p className="text-orange-700 text-sm mt-1">
+            <p className="text-sm font-semibold text-orange-800">
               {language === "ar"
-                ? `الوقت المتبقي: ${remainingDays} يوماً من 56 يوم`
-                : `Time remaining: ${remainingDays} of 56 days`}
+                ? "فترة انتظار نشطة"
+                : "Waiting Period Active"}
             </p>
-            <p className="text-orange-700 text-xs mt-1">
+
+            <p className="mt-1 text-sm text-orange-700">
+              {language === "ar"
+                ? `الوقت المتبقي: ${remainingDays} يوم`
+                : `Time remaining: ${remainingDays} day${remainingDays === 1
+                  ? ""
+                  : "s"
+                }`}
+            </p>
+
+            {formattedNextEligibleDate && (
+              <p className="mt-1 text-sm text-orange-700">
+                {language === "ar"
+                  ? `يمكنك التبرع مجدداً ابتداءً من: ${formattedNextEligibleDate}`
+                  : `You can donate again starting: ${formattedNextEligibleDate}`}
+              </p>
+            )}
+
+            <p className="mt-1 text-xs text-orange-700">
               {language === "ar"
                 ? "لن تتمكن من التبرع حتى انتهاء فترة الانتظار."
                 : "You will not be able to donate until the waiting period ends."}
@@ -201,9 +306,8 @@ export const RequestsList = () => {
         <p className="text-red-800 font-semibold">
           {language === "ar"
             ? `${filteredRequests.length} من ${requesters.length} طلب`
-            : `${filteredRequests.length} of ${requesters.length} request${
-                requesters.length !== 1 ? "s" : ""
-              }`}
+            : `${filteredRequests.length} of ${requesters.length} request${requesters.length !== 1 ? "s" : ""
+            }`}
         </p>
       </div>
 
@@ -265,8 +369,8 @@ export const RequestsList = () => {
               className="w-4 h-4 text-red-600 rounded focus:ring-red-600"
             />
             <span className="text-sm font-medium text-slate-700">
-              {language === "ar" 
-                ? "متوافقة فقط" 
+              {language === "ar"
+                ? "متوافقة فقط"
                 : "Compatible Only"}
             </span>
           </label>
@@ -274,7 +378,7 @@ export const RequestsList = () => {
 
         {user?.role === "donor" && (
           <div className="text-sm text-slate-600 p-2 bg-blue-50 rounded-lg border border-blue-200">
-            {language === "ar" 
+            {language === "ar"
               ? `فصيلة دمك: ${user?.bloodType || "غير محدد"}`
               : `Your blood type: ${user?.bloodType || "Not specified"}`}
           </div>
@@ -289,8 +393,8 @@ export const RequestsList = () => {
             {language === "ar" ? "لا توجد طلبات" : "No requests found"}
           </p>
           <p className="text-gray-500 text-sm mt-2">
-            {language === "ar" 
-              ? "حاول تغيير المرشحات" 
+            {language === "ar"
+              ? "حاول تغيير المرشحات"
               : "Try adjusting your filters"}
           </p>
         </div>
@@ -326,17 +430,16 @@ export const RequestsList = () => {
                     {language === "ar" ? "عرض" : "View"}
                   </button>
                   <>
-                    {user?.verifiedByAdmin && user?.status !== "cool-down" ? (
+                    {user?.verifiedByAdmin && !isInCoolDown ? (
                       <button
                         onClick={() => !assignedRequests.has(req._id) && !assigningId && openUnitsModal(req)}
                         disabled={assignedRequests.has(req._id) || assigningId === req._id}
-                        className={`flex-1 py-2 px-3 rounded-lg font-semibold text-sm transition flex items-center justify-center gap-2 ${
-                          assignedRequests.has(req._id)
-                            ? "bg-green-500 text-white cursor-not-allowed"
-                            : assigningId === req._id
+                        className={`flex-1 py-2 px-3 rounded-lg font-semibold text-sm transition flex items-center justify-center gap-2 ${assignedRequests.has(req._id)
+                          ? "bg-green-500 text-white cursor-not-allowed"
+                          : assigningId === req._id
                             ? "bg-blue-500 text-white opacity-70"
                             : "bg-red-500 text-white hover:bg-red-600 active:scale-95"
-                        }`}
+                          }`}
                       >
                         {assignedRequests.has(req._id) ? (
                           <>
@@ -359,7 +462,7 @@ export const RequestsList = () => {
                       <button
                         disabled
                         className="flex-1 py-2 px-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 bg-gray-300 text-gray-600 cursor-not-allowed"
-                        title={language === "ar" ? (user?.status === "cool-down" ? "أنت في فترة الانتظار" : "تحقق من حسابك أولاً") : (user?.status === "cool-down" ? "You are in a waiting period" : "Verify your account first")}
+                        title={language === "ar" ? (isInCoolDown ? "أنت في فترة الانتظار" : "تحقق من حسابك أولاً") : (isInCoolDown ? "You are in a waiting period" : "Verify your account first")}
                       >
                         <Lock size={16} />
                         {t("donateNow")}
@@ -380,7 +483,7 @@ export const RequestsList = () => {
             <h2 className="text-2xl font-bold mb-4 text-slate-900">
               {language === "ar" ? "اختر عدد الوحدات" : "Select Units to Donate"}
             </h2>
-            
+
             <div className="mb-4 p-3 bg-slate-50 rounded-lg">
               <p className="text-sm text-slate-600 mb-1">
                 {language === "ar" ? "الطلب: " : "Request: "}

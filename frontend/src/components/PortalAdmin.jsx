@@ -54,20 +54,6 @@ export const PortalAdmin = ({ user }) => {
 
   return (
     <div className="space-y-6">
-      <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-lg p-6 border border-slate-700 text-white">
-        <div className="flex items-center gap-4">
-          <BarChart3 className="w-12 h-12 text-slate-400" />
-          <div>
-            <h3 className="text-xl font-bold">
-              {t("adminDashboard")}
-            </h3>
-            <p className="text-slate-400 text-sm">
-              {t("adminDashboardDescription")}
-            </p>
-          </div>
-        </div>
-      </div>
-
       <div className="hidden md:flex gap-2 border-b border-slate-200 overflow-x-auto">
         {["overview", "requests", "hospitals", "donations", "accounts", "profiles", "management", "pending"].map(tab => {
           const tabLabels = {

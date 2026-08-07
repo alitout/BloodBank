@@ -8,6 +8,7 @@ const router = express.Router();
 router.post('/register', authLimiter, UserController.registerDonor);
 router.post('/login', authLimiter, UserController.loginUser);
 router.post('/refresh-token', authLimiter, UserController.refreshAccessToken);
+router.get('/me', verifyAccessToken, UserController.getCurrentUser);
 
 
 router.post('/logout', verifyAccessToken, UserController.logoutUser);

@@ -20,7 +20,7 @@ router.patch('/notifications/:notificationId/read', verifyAccessToken, RequestCo
 router.get('/:id', verifyAccessToken, RequestController.getRequesterById);
 router.patch('/:id', verifyAccessToken, RequestController.updateRequester);
 router.patch('/:id/assign', verifyAdminToken, RequestController.assignRequestToDonor);
-router.patch('/:id/complete-donation', verifyAccessToken, RequestController.completeDonation);
+// router.patch('/:id/complete-donation', verifyAccessToken, RequestController.completeDonation);
 router.patch('/:id/cancel-assignment', verifyAccessToken, RequestController.cancelAssignment);
 router.post('/:id/match-donors', verifyAdminToken, RequestController.matchAndNotifyDonors);
 router.post('/:id/assign-self', verifyAccessToken, RequestController.assignSelfToRequest);

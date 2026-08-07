@@ -5,6 +5,7 @@ import { LanguageProvider, useLanguage } from './LanguageContext';
 import { useDataCache } from './DataCacheContext';
 import { BarChart3, Loader } from 'lucide-react';
 import { API_BASE_URL, getAccessToken } from '../utils/api.js';
+import AdminDonationApprovals from './AdminDonationApprovals.jsx';
 
 export default function AdminDonationsTab() {
   const { accessToken, user } = useAuth();
@@ -21,7 +22,7 @@ export default function AdminDonationsTab() {
 
     // Try to use cached data first
     const cachedData = getCachedData(user?.role, 'donations');
-    
+
     if (cachedData && Array.isArray(cachedData)) {
       setDonations(cachedData);
       setLoading(false);
@@ -61,7 +62,7 @@ export default function AdminDonationsTab() {
 
   const filteredDonations = donations.filter(donation => {
     const searchLower = search.toLowerCase();
-    
+
     if (filterBy === 'donor') {
       return donation.donorName.toLowerCase().includes(searchLower);
     } else if (filterBy === 'patient') {
@@ -89,6 +90,7 @@ export default function AdminDonationsTab() {
 
   return (
     <div className="space-y-6">
+      {/* <AdminDonationApprovals /> */}
       {/* Header */}
       <div className="bg-gradient-to-r from-red-50 to-red-100 rounded-lg p-4 border border-red-200">
         <div className="flex items-center gap-3 mb-2">
@@ -184,7 +186,7 @@ export default function AdminDonationsTab() {
             </thead>
             <tbody className="divide-y divide-slate-200">
               {filteredDonations.map((donation, index) => (
-                <tr key={donation.id} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50'} hover={{backgroundColor: 'rgba(0, 0, 0, 0.02)'}}>
+                <tr key={donation.id} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50'} hover={{ backgroundColor: 'rgba(0, 0, 0, 0.02)' }}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
                     {donation.donorName}
                   </td>
@@ -217,19 +219,18 @@ export default function AdminDonationsTab() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <span
-                      className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                        donation.requestStatus === 'fulfilled'
+                      className={`px-2 py-1 rounded-full text-xs font-semibold ${donation.requestStatus === 'fulfilled'
                           ? 'bg-green-100 text-green-800'
                           : 'bg-yellow-100 text-yellow-800'
-                      }`}
+                        }`}
                     >
                       {language === 'ar'
                         ? donation.requestStatus === 'fulfilled'
                           ? 'مكتمل'
                           : 'قيد التنفيذ'
                         : donation.requestStatus === 'fulfilled'
-                        ? 'Fulfilled'
-                        : 'In Progress'}
+                          ? 'Fulfilled'
+                          : 'In Progress'}
                     </span>
                   </td>
                 </tr>

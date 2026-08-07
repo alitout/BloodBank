@@ -39,7 +39,7 @@ const createRequester = async (req, res) => {
 
     await newRequest.save();
     //console.log('[REQUESTER] Blood request created:', newRequest.id);
-    
+
     // Automatically find and notify matching donors
     try {
       await findAndNotifyMatchingDonors(newRequest);
@@ -47,7 +47,7 @@ const createRequester = async (req, res) => {
       console.error('[REQUESTER] Error sending notifications:', notificationError.message);
       // Don't fail the request creation if notifications fail
     }
-    
+
     res.status(201).json({ message: 'Blood request created', requester: newRequest });
   } catch (error) {
     console.error('[REQUESTER] Error creating request:', error.message);
@@ -201,8 +201,8 @@ const assignSelfToRequest = async (req, res) => {
 
     // Check if enough units are available
     if (totalAssigned + unitsToAssign > request.unitsNeeded) {
-      return res.status(400).json({ 
-        error: `Only ${request.unitsNeeded - totalAssigned} unit(s) remaining for this request` 
+      return res.status(400).json({
+        error: `Only ${request.unitsNeeded - totalAssigned} unit(s) remaining for this request`
       });
     }
 
@@ -233,12 +233,16 @@ const assignSelfToRequest = async (req, res) => {
 
     // Mark the notification as actioned
     await Notification.findOneAndUpdate(
-      { donorId, requestId: id, type: 'request_available' },
-      { 
-        read: true, 
+      {
+        donorId,
+        requestId: request._id,
+        type: 'request_available',
+      },
+      {
+        read: true,
         readAt: new Date(),
         actionTaken: true,
-        assignedByThisNotification: true 
+        assignedByThisNotification: true
       }
     );
 
@@ -246,12 +250,11 @@ const assignSelfToRequest = async (req, res) => {
     try {
       const donorInfo = await User.findOne({ uid: donorId });
       await Notification.create({
-        id: `notif-${Date.now()}`,
         adminId: null, // For all admins
         type: 'donor_assigned',
         title: `New Assignment: ${donorInfo?.fname} ${donorInfo?.lname}`,
         message: `Donor ${donorInfo?.fname} ${donorInfo?.lname} has assigned ${unitsToAssign} unit(s) to request for ${request.fname}`,
-        requestId: id,
+        requestId: request._id,
         donorId: donorId,
         read: false,
         createdAt: new Date()
@@ -263,8 +266,8 @@ const assignSelfToRequest = async (req, res) => {
     }
 
     console.log('[REQUESTER] Donor self-assigned successfully:', id);
-    res.json({ 
-      message: 'You have successfully assigned yourself to this request', 
+    res.json({
+      message: 'You have successfully assigned yourself to this request',
       requester: updatedRequest,
       myAssignment: request.assignedDonors[request.assignedDonors.length - 1]
     });
@@ -279,16 +282,16 @@ const getAllDonations = async (req, res) => {
   try {
     // Get all requests with completed donations
     const requests = await Requester.find({});
-    
+
     const allDonations = [];
-    
+
     for (const request of requests) {
       if (request.assignedDonors && request.assignedDonors.length > 0) {
         for (const assignment of request.assignedDonors) {
           if (assignment.unitsCompleted > 0) {
             // Get donor info
             const donor = await User.findOne({ uid: assignment.donorUid });
-            
+
             allDonations.push({
               id: `${request.id}-${assignment.donorUid}`,
               requestId: request.id,
@@ -310,10 +313,10 @@ const getAllDonations = async (req, res) => {
         }
       }
     }
-    
+
     // Sort by completion date descending
     allDonations.sort((a, b) => new Date(b.completionDate) - new Date(a.completionDate));
-    
+
     res.json(allDonations);
   } catch (error) {
     console.error('[REQUESTER] Error fetching all donations:', error.message);
@@ -402,8 +405,8 @@ const markNotificationAsRead = async (req, res) => {
 
     const notification = await Notification.findOneAndUpdate(
       { _id: notificationId, donorId },
-      { 
-        read: true, 
+      {
+        read: true,
         readAt: new Date()
       },
       { new: true }
@@ -485,171 +488,220 @@ const matchAndNotifyDonors = async (req, res) => {
   }
 };
 
-// Get assigned requests for a donor
+// Get assigned requests for the authenticated donor
 const getAssignedRequests = async (req, res) => {
   try {
-    const donorId = req.user?.uid; // From auth middleware
+    const donorId = req.user?.uid;
 
     if (!donorId) {
-      return res.status(401).json({ error: 'Donor ID not found in token' });
+      return res.status(401).json({
+        error: 'Donor ID not found in token',
+      });
     }
 
-    console.log('[REQUESTER] Fetching assigned requests for donor:', donorId);
+    console.log(
+      '[REQUESTER] Fetching assigned requests for donor:',
+      donorId
+    );
 
-    // Find requests where this donor is in assignedDonors
     const assignedRequests = await Requester.find({
       'assignedDonors.donorUid': donorId,
-      status: { $ne: 'cancelled' }
-    }).sort({ 'assignedDonors.assignedAt': -1 });
-
-    // Filter to only show active assignments (where donor hasn't completed their units)
-    const activeRequests = assignedRequests.filter(req => {
-      const donorAssignment = req.assignedDonors.find(d => d.donorUid === donorId);
-      // Show if not all units completed by this donor
-      return donorAssignment && donorAssignment.unitsCompleted < donorAssignment.unitsAssigned;
+      status: {
+        $ne: 'cancelled',
+      },
+    }).sort({
+      'assignedDonors.assignedAt': -1,
     });
 
-    // Map to include only this donor's assignment info
-    const enrichedRequests = activeRequests.map(req => {
-      const donorAssignment = req.assignedDonors.find(d => d.donorUid === donorId);
-      return {
-        ...req.toObject(),
-        myAssignment: donorAssignment
-      };
-    });
+    const requestIds = assignedRequests.map(
+      request => request._id
+    );
+
+    const donationRecords = await Donation.find({
+      donorUid: donorId,
+      requestId: {
+        $in: requestIds,
+      },
+    })
+      .sort({
+        updatedAt: -1,
+      })
+      .lean();
+
+    /*
+     * A donor should normally have one donation record
+     * per request. Using a Map lets us attach it quickly.
+     */
+    const donationByRequest = new Map();
+
+    for (const donation of donationRecords) {
+      const requestId = donation.requestId?.toString();
+
+      if (
+        requestId &&
+        !donationByRequest.has(requestId)
+      ) {
+        donationByRequest.set(
+          requestId,
+          donation
+        );
+      }
+    }
+
+    const enrichedRequests = assignedRequests
+      .map(request => {
+        const donorAssignment =
+          request.assignedDonors?.find(
+            assignment =>
+              assignment.donorUid === donorId
+          );
+
+        if (!donorAssignment) {
+          return null;
+        }
+
+        /*
+         * Once admin approval completes all assigned units,
+         * this request belongs in donation history instead.
+         */
+        if (
+          (donorAssignment.unitsCompleted || 0) >=
+          (donorAssignment.unitsAssigned || 0)
+        ) {
+          return null;
+        }
+
+        const donation = donationByRequest.get(
+          request._id.toString()
+        );
+
+        const confirmationStatus =
+          donation?.status || 'not_confirmed';
+
+        const canConfirm = [
+          'not_confirmed',
+          'pending_confirmation',
+          'rejected',
+        ].includes(confirmationStatus);
+
+        return {
+          ...request.toObject(),
+
+          myAssignment: donorAssignment,
+
+          donation: donation || null,
+
+          confirmationStatus,
+
+          canConfirm,
+
+          waitingForAdmin:
+            confirmationStatus ===
+            'pending_admin_approval',
+
+          rejected:
+            confirmationStatus === 'rejected',
+
+          rejectionReason:
+            donation?.rejectionReason || null,
+        };
+      })
+      .filter(Boolean);
 
     res.json(enrichedRequests);
   } catch (error) {
-    console.error('[REQUESTER] Error fetching assigned requests:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-};
+    console.error(
+      '[REQUESTER] Error fetching assigned requests:',
+      error.message
+    );
 
-// Complete a donation (donor confirms donation is done)
-const completeDonation = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const donorId = req.user?.uid; // From auth middleware
-
-    if (!donorId) {
-      return res.status(401).json({ error: 'Donor ID not found in token' });
-    }
-
-    console.log('[REQUESTER] Completing donation for request:', id, 'Donor:', donorId);
-
-    // Get the request
-    const request = await Requester.findById(id);
-    if (!request) {
-      return res.status(404).json({ error: 'Blood request not found' });
-    }
-
-    // Find donor's assignment
-    const donorAssignment = request.assignedDonors?.find(d => d.donorUid === donorId);
-    if (!donorAssignment) {
-      return res.status(403).json({ error: 'This request is not assigned to you' });
-    }
-
-    // Mark all units as completed for this donor
-    donorAssignment.unitsCompleted = donorAssignment.unitsAssigned;
-    donorAssignment.completedAt = new Date();
-
-    // Update donor's profile
-    const donor = await User.findOne({ uid: donorId });
-    if (donor) {
-      // Increment donation count
-      donor.donationCount = (donor.donationCount || 0) + donorAssignment.unitsAssigned;
-      
-      // Set last donation date to today
-      donor.lastDonationDate = new Date();
-      
-      // Set status to cool-down for 56 days (standard blood donation interval)
-      donor.status = 'cool-down';
-      
-      await donor.save();
-      
-      console.log('[REQUESTER] Updated donor profile - Donations:', donor.donationCount, 'Status:', donor.status);
-    }
-
-    // Check if all units are completed
-    const totalCompleted = request.assignedDonors.reduce((sum, d) => sum + d.unitsCompleted, 0);
-    if (totalCompleted === request.unitsNeeded) {
-      request.status = 'fulfilled';
-      console.log('[REQUESTER] Request fulfilled - All units completed:', id);
-    }
-
-    request.updatedAt = new Date();
-    const updatedRequest = await request.save();
-
-    // Create notification for admins about donation completion
-    try {
-      const donorInfo = await User.findOne({ uid: donorId });
-      await Notification.create({
-        id: `notif-${Date.now()}`,
-        adminId: null, // For all admins
-        type: 'donation_completed',
-        title: `Donation Completed: ${donorInfo?.fname} ${donorInfo?.lname}`,
-        message: `Donor ${donorInfo?.fname} ${donorInfo?.lname} has completed ${donorAssignment.unitsCompleted} unit(s) for patient ${request.fname}. Request status: ${request.status}`,
-        requestId: id,
-        donorId: donorId,
-        read: false,
-        createdAt: new Date()
-      });
-      console.log('[NOTIFICATION] Created admin notification for donation completion');
-    } catch (notificationError) {
-      console.error('[REQUESTER] Error creating donation completion notification:', notificationError.message);
-      // Don't fail the donation if notification fails
-    }
-
-    console.log('[REQUESTER] Donation completed for request:', id);
-
-    res.json({
-      message: 'Donation completed successfully',
-      request: updatedRequest,
-      myAssignment: donorAssignment,
-      donationCount: donor?.donationCount,
-      status: donor?.status
+    res.status(500).json({
+      error: 'Failed to fetch assigned requests',
     });
-  } catch (error) {
-    console.error('[REQUESTER] Error completing donation:', error.message);
-    res.status(500).json({ error: error.message });
   }
 };
+
 
 // Get donation history for a donor (completed donations)
 const getDonationHistory = async (req, res) => {
   try {
-    const donorId = req.user?.uid; // From auth middleware
+    const donorId = req.user?.uid;
 
     if (!donorId) {
-      return res.status(401).json({ error: 'Donor ID not found in token' });
+      return res.status(401).json({
+        error: "Donor ID not found in token",
+      });
     }
 
-    console.log('[REQUESTER] Fetching donation history for donor:', donorId);
+    console.log(
+      "[REQUESTER] Fetching donation history for donor:",
+      donorId
+    );
 
-    // Find requests where this donor has completed donations
-    const allRequests = await Requester.find({
-      'assignedDonors.donorUid': donorId
-    }).sort({ updatedAt: -1 });
+    const requests = await Requester.find({
+      "assignedDonors.donorUid": donorId,
+    })
+      .sort({
+        updatedAt: -1,
+      })
+      .lean();
+    const history = requests
+      .map((request) => {
+        const donorAssignment =
+          request.assignedDonors?.find(
+            (assignment) =>
+              assignment.donorUid === donorId
+          );
 
-    // Filter to only show completed donations
-    const completedDonations = allRequests.filter(req => {
-      const donorAssignment = req.assignedDonors.find(d => d.donorUid === donorId);
-      return donorAssignment && donorAssignment.unitsCompleted > 0;
+        if (
+          !donorAssignment ||
+          (donorAssignment.unitsCompleted || 0) <= 0
+        ) {
+          return null;
+        }
+
+        return {
+          ...request,
+          myAssignment: donorAssignment,
+
+          unitsCompleted:
+            donorAssignment.unitsCompleted || 0,
+
+          unitsAssigned:
+            donorAssignment.unitsAssigned || 0,
+
+          completionDate:
+            donorAssignment.completedAt ||
+            request.updatedAt ||
+            null,
+
+          donationStatus: "approved",
+        };
+      })
+      .filter(Boolean);
+
+    const totalUnits = history.reduce(
+      (total, donation) =>
+        total +
+        (donation.myAssignment?.unitsCompleted || 0),
+      0
+    );
+
+    res.json({
+      history,
+      count: totalUnits,
+      totalUnits,
+      donationCount: totalUnits,
     });
-
-    // Map to include only this donor's assignment info
-    const enrichedHistory = completedDonations.map(req => {
-      const donorAssignment = req.assignedDonors.find(d => d.donorUid === donorId);
-      return {
-        ...req.toObject(),
-        myAssignment: donorAssignment
-      };
-    });
-
-    res.json(enrichedHistory);
   } catch (error) {
-    console.error('[REQUESTER] Error fetching donation history:', error.message);
-    res.status(500).json({ error: error.message });
+    console.error(
+      "[REQUESTER] Error fetching donation history:",
+      error.message
+    );
+
+    res.status(500).json({
+      error: "Failed to fetch donation history",
+    });
   }
 };
 
@@ -733,6 +785,6 @@ export default {
   getAssignedRequests,
   getDonationHistory,
   getAllDonations,
-  completeDonation,
+  // completeDonation,
   cancelAssignment
 };

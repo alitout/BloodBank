@@ -283,6 +283,11 @@ export const authAPI = {
       body: JSON.stringify({ refreshToken })
     }),
 
+  getCurrentUser: () =>
+    fetchAPI("/auth/me", {
+      method: "GET",
+    }),
+
   // Logout user
   logoutUser: () =>
     fetchAPI('/auth/logout', {

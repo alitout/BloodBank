@@ -1,335 +1,828 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback
-} from "react"; import { authAPI } from "../utils/api.js";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react"
+import { authAPI, getAccessToken } from "../utils/api.js";
 
-/**
- * @typedef {Object} AuthContextProps
- * @property {import('../types').UserSession | null} user
- * @property {boolean} isLoading
- * @property {string | null} error
- * @property {string | null} accessToken
- * @property {string | null} refreshToken
- * @property {Function} register
- * @property {Function} login
- * @property {Function} logout
- * @property {Function} fetchAllAccounts
- * @property {Function} refreshTokens
- */
-
-// 🔧 TEST MODE - Set to true for testing with shorter timings
 const TEST_MODE = false;
 
-const AuthContext = createContext(undefined);
+const AuthContext =
+  createContext(undefined);
 
-// Helper function to store token timestamps
+/*
+ * IMPORTANT:
+ * These production durations MUST match
+ * your backend JWT configuration.
+ *
+ * Change these two values if your backend
+ * uses different token lifetimes.
+ */
+const ACCESS_TOKEN_DURATION =
+  TEST_MODE
+    ? 1 * 60 * 1000
+    : 60 * 60 * 1000;
+
+const REFRESH_TOKEN_DURATION =
+  TEST_MODE
+    ? 3 * 60 * 1000
+    : 20 * 24 * 60 * 60 * 1000;
+
 const storeTokenTimestamps = (storage) => {
-  const now = Date.now();
-  // Use test timings if TEST_MODE is enabled
-  const ACCESS_TOKEN_DURATION = TEST_MODE ? 1 * 60 * 1000 : 60 * 60 * 1000; // 1 min (test) / 1 hour (prod)
-  const REFRESH_TOKEN_DURATION = TEST_MODE ? 3 * 60 * 1000 : 20 * 24 * 60 * 60 * 1000;
-  storage.setItem('tokenCreationTime', now.toString());
-  storage.setItem('tokenExpirationTime', (now + ACCESS_TOKEN_DURATION).toString());
-  storage.setItem('refreshTokenCreationTime', now.toString());
-  storage.setItem('refreshTokenExpirationTime', (now + REFRESH_TOKEN_DURATION).toString());
+  const now = Date.now()
+  storage.setItem("tokenCreationTime", now.toString());
+  storage.setItem("tokenExpirationTime", (now + ACCESS_TOKEN_DURATION).toString());
+  storage.setItem("refreshTokenCreationTime", now.toString());
+  storage.setItem("refreshTokenExpirationTime", (now + REFRESH_TOKEN_DURATION).toString());
 
   if (TEST_MODE) {
-    console.log('🧪 [TEST MODE] Token timings:');
-    console.log(`   Access Token expires in: ${ACCESS_TOKEN_DURATION / 1000}s`);
-    console.log(`   Refresh Token expires in: ${REFRESH_TOKEN_DURATION / 1000}s`);
+    console.log(
+      "[TEST MODE] Access token:",
+      ACCESS_TOKEN_DURATION / 1000,
+      "seconds"
+    );
+
+    console.log(
+      "[TEST MODE] Refresh token:",
+      REFRESH_TOKEN_DURATION / 1000,
+      "seconds"
+    );
   }
 };
 
-export const AuthProvider = ({ children }) => {
+const clearStorage = (storage) => {
+  storage.removeItem("accessToken");
+  storage.removeItem("refreshToken");
+  storage.removeItem("user");
+  storage.removeItem("tokenCreationTime");
+  storage.removeItem("tokenExpirationTime");
+  storage.removeItem("refreshTokenCreationTime");
+  storage.removeItem("refreshTokenExpirationTime");
+};
+
+export const AuthProvider = ({ children, }) => {
   const [user, setUser] = useState(null);
-  const [accessToken, setAccessToken] = useState(null);
-  const [refreshToken, setRefreshToken] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+
+  const [accessToken, setAccessToken,] = useState(null);
+
+  const [refreshToken, setRefreshToken,] = useState(null);
+
+  const [isLoading, setIsLoading,] = useState(true);
+
   const [error, setError] = useState(null);
 
-  // Initialize - restore tokens from sessionStorage or localStorage
-  useEffect(() => {
-    try {
-      //console.log('🔐 [AUTH] Initializing AuthContext...');
-      // Check sessionStorage first, then localStorage
-      let savedAccessToken = sessionStorage.getItem('accessToken');
-      let savedRefreshToken = sessionStorage.getItem('refreshToken');
-      let savedUser = sessionStorage.getItem('user');
-
-      // If not in sessionStorage, check localStorage (for "stay logged in")
-      if (!savedAccessToken) {
-        savedAccessToken = localStorage.getItem('accessToken');
-        savedRefreshToken = localStorage.getItem('refreshToken');
-        savedUser = localStorage.getItem('user');
-      }
-
-      if (savedAccessToken && savedUser) {
-        try {
-          const parsedUser = JSON.parse(savedUser);
-          setAccessToken(savedAccessToken);
-          setRefreshToken(savedRefreshToken);
-          setUser(parsedUser);
-          //console.log('✅ [AUTH] Session restored from storage');
-        } catch (parseError) {
-          console.warn('⚠️ [AUTH] Corrupted user data in storage, clearing...');
-          // Clear corrupted data
-          sessionStorage.removeItem('accessToken');
-          sessionStorage.removeItem('refreshToken');
-          sessionStorage.removeItem('user');
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-          localStorage.removeItem('user');
-        }
-      }
-    } catch (error) {
-      console.error('❌ [AUTH] Error during initialization:', error.message);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  // Fetch all accounts from backend
-  const fetchAllAccounts = async () => {
-    try {
-      //console.log('📥 [AUTH] Fetching all accounts from backend...');
-      const result = await authAPI.getAllAccounts();
-
-      if (result.success && result.data) {
-        //console.log(`✅ [AUTH] Fetched ${result.data.length} accounts`);
-        return result.data;
-      } else {
-        throw new Error(result.error || 'Failed to fetch accounts');
-      }
-    } catch (e) {
-      const errorMsg = `Failed to fetch accounts: ${e.message}`;
-      console.error('❌ [AUTH]', errorMsg);
-      setError(errorMsg);
-      throw e;
-    }
-  };
-
-  // Register new donor
-  const register = async (email, fname, lname, phone, password, passwordConfirmation, bloodType) => {
-    try {
-      setError(null);
-
-      if (!email || !fname || !lname || !phone || !password || !passwordConfirmation) {
-        const msg = "All fields are required";
-        setError(msg);
-        return { success: false, message: msg };
-      }
-
-      //console.log('\n🚀 [AUTH] Registering new donor:', email);
-
-      const result = await authAPI.registerDonor(
-        email.trim().toLowerCase(),
-        fname.trim(),
-        lname.trim(),
-        phone.trim(),
-        password,
-        passwordConfirmation,
-        bloodType
-      );
-
-      if (result.success && result.data) {
-        //console.log('✅ [AUTH] Registration successful');
-
-        // Store tokens
-        setAccessToken(result.data.accessToken);
-        setRefreshToken(result.data.refreshToken);
-        sessionStorage.setItem('accessToken', result.data.accessToken);
-        sessionStorage.setItem('refreshToken', result.data.refreshToken);
-        storeTokenTimestamps(sessionStorage);
-
-        // Store user data
-        setUser(result.data.user);
-        sessionStorage.setItem('user', JSON.stringify(result.data.user));
-
-        return { success: true, message: "Account created successfully!" };
-      } else {
-        const msg = result.error || 'Registration failed';
-        setError(msg);
-        console.error('❌ [AUTH] Registration failed:', msg);
-        return { success: false, message: msg };
-      }
-    } catch (e) {
-      const msg = `Registration error: ${e.message}`;
-      setError(msg);
-      console.error('❌ [AUTH]', msg);
-      return { success: false, message: msg };
-    }
-  };
-
-  // Login user (email or phone + password)
-  const login = async (loginData) => {
-    try {
-      setError(null);
-
-      const { email, phone, password, stayLoggedIn } = loginData;
-
-      if (!password || (!email && !phone)) {
-        const msg = "Email/phone and password are required";
-        setError(msg);
-        return { success: false, message: msg };
-      }
-
-      //console.log('\n🔑 [AUTH] Attempting login...');
-
-      const result = await authAPI.loginUser(email, phone, password);
-
-      if (result.success && result.data) {
-        //console.log('✅ [AUTH] Login successful');
-
-        // Determine storage based on stayLoggedIn
-        const storage = stayLoggedIn ? localStorage : sessionStorage;
-
-        // Store tokens
-        setAccessToken(result.data.accessToken);
-        setRefreshToken(result.data.refreshToken);
-        storage.setItem('accessToken', result.data.accessToken);
-        storage.setItem('refreshToken', result.data.refreshToken);
-        storeTokenTimestamps(storage);
-
-        // Store user data
-        setUser(result.data.user);
-        storage.setItem('user', JSON.stringify(result.data.user));
-
-        return { success: true, message: "Successfully logged in!" };
-      } else {
-        const msg = result.error || 'Login failed';
-        setError(msg);
-        console.error('❌ [AUTH] Login failed:', msg);
-        return { success: false, message: msg };
-      }
-    } catch (e) {
-      const msg = `Login error: ${e.message}`;
-      setError(msg);
-      console.error('❌ [AUTH]', msg);
-      return { success: false, message: msg };
-    }
-  };
-
-  // Refresh tokens
-  const refreshTokens = useCallback(async () => {
-    try {
-      if (!refreshToken) {
-        console.warn('⚠️  [AUTH] No refresh token available');
-        return false;
-      }
-
-      //console.log('🔄 [AUTH] Refreshing access token...');
-
-      const result = await authAPI.refreshAccessToken(refreshToken);
-
-      if (result.success && result.data) {
-        //console.log('✅ [AUTH] Token refreshed successfully');
-        setAccessToken(result.data.accessToken);
-
-        // Update in both storages (in case user has it saved)
-        const storage = localStorage.getItem("refreshToken")
-          ? localStorage
-          : sessionStorage;
-
-        storage.setItem(
-          "accessToken",
-          result.data.accessToken
-        );
-
-        // Only update the ACCESS token expiration.
-        // Do NOT reset the 20-day refresh token lifetime.
-        const now = Date.now();
-
-        const ACCESS_TOKEN_DURATION = TEST_MODE
-          ? 1 * 60 * 1000
-          : 60 * 60 * 1000;
-
-        storage.setItem(
-          "tokenCreationTime",
-          now.toString()
-        );
-
-        storage.setItem(
-          "tokenExpirationTime",
-          (
-            now +
-            ACCESS_TOKEN_DURATION
-          ).toString()
-        );
-
-        return true;
-      } else {
-        console.error('❌ [AUTH] Token refresh failed');
-        logout();
-        return false;
-      }
-    } catch (e) {
-      console.error('❌ [AUTH] Token refresh error:', e.message);
-      logout();
-      return false;
-    }
-  }, [refreshToken, logout]);
-
-  // Logout user
+  /*
+   * Logout must be declared before
+   * refreshTokens because refreshTokens
+   * depends on it.
+   */
   const logout = useCallback(() => {
-    console.log("🚪 [AUTH] User logged out");
+    console.log("[AUTH] User logged out");
 
     setUser(null);
     setAccessToken(null);
     setRefreshToken(null);
     setError(null);
 
-    sessionStorage.removeItem("accessToken");
-    sessionStorage.removeItem("refreshToken");
-    sessionStorage.removeItem("user");
-    sessionStorage.removeItem("tokenCreationTime");
-    sessionStorage.removeItem("tokenExpirationTime");
-    sessionStorage.removeItem("refreshTokenCreationTime");
-    sessionStorage.removeItem("refreshTokenExpirationTime");
+    clearStorage(
+      sessionStorage
+    );
 
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
-    localStorage.removeItem("user");
-    localStorage.removeItem("tokenCreationTime");
-    localStorage.removeItem("tokenExpirationTime");
-    localStorage.removeItem("refreshTokenCreationTime");
-    localStorage.removeItem("refreshTokenExpirationTime");
+    clearStorage(
+      localStorage
+    );
   }, []);
 
-  // Enable "keep me signed in" - moves tokens from sessionStorage to localStorage
-  const enableKeepMeSignedIn = () => {
-    if (TEST_MODE) console.log('🧪 [TEST] Enabling "Keep me signed in" - moving tokens to localStorage');
+  /*
+   * Get latest user directly from DB.
+   *
+   * This is what updates:
+   * - donor status
+   * - donationCount
+   * - lastDonationDate
+   * - nextEligibleDate
+   * - verification status
+   */
+  const refreshUserProfile =
+    useCallback(async () => {
+      try {
+        const token =
+          getAccessToken();
 
-    const accessTokenValue = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
-    const refreshTokenValue = sessionStorage.getItem('refreshToken') || localStorage.getItem('refreshToken');
-    const userValue = sessionStorage.getItem('user') || localStorage.getItem('user');
-    const tokenCreationTime = sessionStorage.getItem('tokenCreationTime') || localStorage.getItem('tokenCreationTime');
-    const tokenExpirationTime = sessionStorage.getItem('tokenExpirationTime') || localStorage.getItem('tokenExpirationTime');
-    const refreshTokenCreationTime = sessionStorage.getItem('refreshTokenCreationTime') || localStorage.getItem('refreshTokenCreationTime');
-    const refreshTokenExpirationTime = sessionStorage.getItem('refreshTokenExpirationTime') || localStorage.getItem('refreshTokenExpirationTime');
+        if (!token) {
+          console.warn(
+            "[AUTH] Cannot refresh profile: no access token"
+          );
 
-    // Move to localStorage
-    if (accessTokenValue) localStorage.setItem('accessToken', accessTokenValue);
-    if (refreshTokenValue) localStorage.setItem('refreshToken', refreshTokenValue);
-    if (userValue) localStorage.setItem('user', userValue);
-    if (tokenCreationTime) localStorage.setItem('tokenCreationTime', tokenCreationTime);
-    if (tokenExpirationTime) localStorage.setItem('tokenExpirationTime', tokenExpirationTime);
-    if (refreshTokenCreationTime) localStorage.setItem('refreshTokenCreationTime', refreshTokenCreationTime);
-    if (refreshTokenExpirationTime) localStorage.setItem('refreshTokenExpirationTime', refreshTokenExpirationTime);
+          return {
+            success: false,
+            error:
+              "No access token",
+          };
+        }
 
-    // Clear from sessionStorage
-    sessionStorage.removeItem('accessToken');
-    sessionStorage.removeItem('refreshToken');
-    sessionStorage.removeItem('user');
+        console.log(
+          "[AUTH] Refreshing current user profile..."
+        );
+
+        const result =
+          await authAPI.getCurrentUser();
+
+        if (
+          !result?.success ||
+          !result?.data
+        ) {
+          console.error(
+            "[AUTH] Profile refresh failed:",
+            result?.error
+          );
+
+          return {
+            success: false,
+            error:
+              result?.error ||
+              "Failed to refresh profile",
+          };
+        }
+
+        const freshUser =
+          result.data.user ||
+          result.data;
+
+        if (!freshUser?.uid) {
+          console.error(
+            "[AUTH] Invalid profile response:",
+            result.data
+          );
+
+          return {
+            success: false,
+            error:
+              "Invalid profile response",
+          };
+        }
+
+        console.log(
+          "[AUTH] Fresh profile received:",
+          {
+            uid:
+              freshUser.uid,
+            status:
+              freshUser.status,
+            donationCount:
+              freshUser.donationCount,
+            lastDonationDate:
+              freshUser.lastDonationDate,
+            nextEligibleDate:
+              freshUser.nextEligibleDate,
+          }
+        );
+
+        setUser(freshUser);
+
+        const storage =
+          localStorage.getItem(
+            "accessToken"
+          )
+            ? localStorage
+            : sessionStorage;
+
+        storage.setItem(
+          "user",
+          JSON.stringify(
+            freshUser
+          )
+        );
+
+        return {
+          success: true,
+          user: freshUser,
+        };
+      } catch (profileError) {
+        console.error(
+          "[AUTH] refreshUserProfile error:",
+          profileError
+        );
+
+        return {
+          success: false,
+          error:
+            profileError?.message ||
+            "Failed to refresh profile",
+        };
+      }
+    }, []);
+
+  /*
+   * Restore an existing login when
+   * the page/browser reloads.
+   */
+  useEffect(() => {
+    const initializeAuth =
+      async () => {
+        try {
+          let storage =
+            sessionStorage;
+
+          let savedAccessToken =
+            sessionStorage.getItem(
+              "accessToken"
+            );
+
+          let savedRefreshToken =
+            sessionStorage.getItem(
+              "refreshToken"
+            );
+
+          let savedUser =
+            sessionStorage.getItem(
+              "user"
+            );
+
+          /*
+           * If no session login exists,
+           * try persistent login.
+           */
+          if (!savedAccessToken) {
+            storage =
+              localStorage;
+
+            savedAccessToken =
+              localStorage.getItem(
+                "accessToken"
+              );
+
+            savedRefreshToken =
+              localStorage.getItem(
+                "refreshToken"
+              );
+
+            savedUser =
+              localStorage.getItem(
+                "user"
+              );
+          }
+
+          if (
+            savedAccessToken &&
+            savedUser
+          ) {
+            try {
+              const parsedUser =
+                JSON.parse(
+                  savedUser
+                );
+
+              setAccessToken(
+                savedAccessToken
+              );
+
+              setRefreshToken(
+                savedRefreshToken
+              );
+
+              setUser(
+                parsedUser
+              );
+
+              /*
+               * Replace possibly stale browser
+               * profile with current DB profile.
+               */
+              const profileResult =
+                await refreshUserProfile();
+
+              if (
+                !profileResult.success
+              ) {
+                console.warn(
+                  "[AUTH] Stored session restored, but profile refresh failed:",
+                  profileResult.error
+                );
+              }
+            } catch (
+            parseError
+            ) {
+              console.warn(
+                "[AUTH] Invalid stored user data. Clearing session."
+              );
+
+              clearStorage(
+                storage
+              );
+
+              setUser(null);
+              setAccessToken(
+                null
+              );
+
+              setRefreshToken(
+                null
+              );
+            }
+          }
+        } catch (
+        initializationError
+        ) {
+          console.error(
+            "[AUTH] Initialization error:",
+            initializationError
+          );
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+    initializeAuth();
+  }, [refreshUserProfile]);
+
+  const fetchAllAccounts =
+    async () => {
+      try {
+        const result =
+          await authAPI.getAllAccounts();
+
+        if (
+          result.success &&
+          result.data
+        ) {
+          return result.data;
+        }
+
+        throw new Error(
+          result.error ||
+          "Failed to fetch accounts"
+        );
+      } catch (fetchError) {
+        const message =
+          `Failed to fetch accounts: ${fetchError.message}`;
+
+        console.error(
+          "[AUTH]",
+          message
+        );
+
+        setError(message);
+
+        throw fetchError;
+      }
+    };
+
+  const register = async (
+    email,
+    fname,
+    lname,
+    phone,
+    password,
+    passwordConfirmation,
+    bloodType
+  ) => {
+    try {
+      setError(null);
+
+      if (
+        !email ||
+        !fname ||
+        !lname ||
+        !phone ||
+        !password ||
+        !passwordConfirmation
+      ) {
+        const message =
+          "All fields are required";
+
+        setError(message);
+
+        return {
+          success: false,
+          message,
+        };
+      }
+
+      const result =
+        await authAPI.registerDonor(
+          email
+            .trim()
+            .toLowerCase(),
+          fname.trim(),
+          lname.trim(),
+          phone.trim(),
+          password,
+          passwordConfirmation,
+          bloodType
+        );
+
+      if (
+        !result.success ||
+        !result.data
+      ) {
+        const message =
+          result.error ||
+          "Registration failed";
+
+        setError(message);
+
+        return {
+          success: false,
+          message,
+        };
+      }
+
+      /*
+       * Registration uses sessionStorage.
+       */
+      clearStorage(
+        localStorage
+      );
+
+      const storage =
+        sessionStorage;
+
+      storage.setItem(
+        "accessToken",
+        result.data.accessToken
+      );
+
+      storage.setItem(
+        "refreshToken",
+        result.data.refreshToken
+      );
+
+      storage.setItem(
+        "user",
+        JSON.stringify(
+          result.data.user
+        )
+      );
+
+      storeTokenTimestamps(
+        storage
+      );
+
+      setAccessToken(
+        result.data.accessToken
+      );
+
+      setRefreshToken(
+        result.data.refreshToken
+      );
+
+      setUser(
+        result.data.user
+      );
+
+      const profileResult =
+        await refreshUserProfile();
+
+      if (
+        !profileResult.success
+      ) {
+        console.warn(
+          "[AUTH] Registration succeeded, but profile refresh failed:",
+          profileResult.error
+        );
+      }
+
+      return {
+        success: true,
+        message:
+          "Account created successfully!",
+      };
+    } catch (
+    registrationError
+    ) {
+      const message =
+        `Registration error: ${registrationError.message}`;
+
+      setError(message);
+
+      console.error(
+        "[AUTH]",
+        message
+      );
+
+      return {
+        success: false,
+        message,
+      };
+    }
   };
 
-  // Force logout - automatically logout when refresh token expires
-  const forceLogout = useCallback(() => {
-    console.log("🚨 [AUTH] Force logout triggered");
-    logout();
-  }, [logout]);
+  const login = async (
+    loginData
+  ) => {
+    try {
+      setError(null);
+
+      const {
+        email,
+        phone,
+        password,
+        stayLoggedIn,
+      } = loginData;
+
+      if (
+        !password ||
+        (!email && !phone)
+      ) {
+        const message =
+          "Email/phone and password are required";
+
+        setError(message);
+
+        return {
+          success: false,
+          message,
+        };
+      }
+
+      const result =
+        await authAPI.loginUser(
+          email,
+          phone,
+          password
+        );
+
+      if (
+        !result.success ||
+        !result.data
+      ) {
+        const message =
+          result.error ||
+          "Login failed";
+
+        setError(message);
+
+        return {
+          success: false,
+          message,
+        };
+      }
+
+      const storage =
+        stayLoggedIn
+          ? localStorage
+          : sessionStorage;
+
+      /*
+       * Prevent old tokens existing in both
+       * storage locations.
+       */
+      const otherStorage =
+        stayLoggedIn
+          ? sessionStorage
+          : localStorage;
+
+      clearStorage(
+        otherStorage
+      );
+
+      /*
+       * IMPORTANT:
+       * Store access token before calling
+       * refreshUserProfile().
+       *
+       * getAccessToken() reads browser
+       * storage.
+       */
+      storage.setItem(
+        "accessToken",
+        result.data.accessToken
+      );
+
+      storage.setItem(
+        "refreshToken",
+        result.data.refreshToken
+      );
+
+      storage.setItem(
+        "user",
+        JSON.stringify(
+          result.data.user
+        )
+      );
+
+      storeTokenTimestamps(
+        storage
+      );
+
+      setAccessToken(
+        result.data.accessToken
+      );
+
+      setRefreshToken(
+        result.data.refreshToken
+      );
+
+      setUser(
+        result.data.user
+      );
+
+      /*
+       * NOW request /auth/me.
+       */
+      const profileResult =
+        await refreshUserProfile();
+
+      if (
+        !profileResult.success
+      ) {
+        console.warn(
+          "[AUTH] Login succeeded, but profile refresh failed:",
+          profileResult.error
+        );
+      }
+
+      return {
+        success: true,
+        message:
+          "Successfully logged in!",
+      };
+    } catch (loginError) {
+      const message =
+        `Login error: ${loginError.message}`;
+
+      setError(message);
+
+      console.error(
+        "[AUTH]",
+        message
+      );
+
+      return {
+        success: false,
+        message,
+      };
+    }
+  };
+
+  /*
+   * Rotate both tokens.
+   */
+  const refreshTokens =
+    useCallback(async () => {
+      try {
+        /*
+         * Read latest token from storage first.
+         * This prevents stale React closure problems.
+         */
+        const storedRefreshToken =
+          localStorage.getItem(
+            "refreshToken"
+          ) ||
+          sessionStorage.getItem(
+            "refreshToken"
+          ) ||
+          refreshToken;
+
+        if (
+          !storedRefreshToken
+        ) {
+          console.warn(
+            "[AUTH] No refresh token available"
+          );
+
+          return false;
+        }
+
+        const result =
+          await authAPI.refreshAccessToken(
+            storedRefreshToken
+          );
+
+        if (
+          !result.success ||
+          !result.data
+        ) {
+          console.error(
+            "[AUTH] Token refresh failed:",
+            result.error
+          );
+
+          logout();
+
+          return false;
+        }
+
+        const newAccessToken =
+          result.data.accessToken;
+
+        const newRefreshToken =
+          result.data.refreshToken;
+
+        if (
+          !newAccessToken ||
+          !newRefreshToken
+        ) {
+          console.error(
+            "[AUTH] Refresh endpoint did not return both tokens"
+          );
+
+          logout();
+
+          return false;
+        }
+
+        const storage =
+          localStorage.getItem(
+            "refreshToken"
+          )
+            ? localStorage
+            : sessionStorage;
+
+        setAccessToken(
+          newAccessToken
+        );
+
+        setRefreshToken(
+          newRefreshToken
+        );
+
+        storage.setItem(
+          "accessToken",
+          newAccessToken
+        );
+
+        storage.setItem(
+          "refreshToken",
+          newRefreshToken
+        );
+
+        /*
+         * Backend rotated the refresh token,
+         * therefore both timestamps restart.
+         */
+        storeTokenTimestamps(
+          storage
+        );
+
+        console.log(
+          "[AUTH] Tokens rotated successfully"
+        );
+
+        return true;
+      } catch (refreshError) {
+        console.error(
+          "[AUTH] Token refresh error:",
+          refreshError
+        );
+
+        logout();
+
+        return false;
+      }
+    }, [
+      refreshToken,
+      logout,
+    ]);
+
+  const enableKeepMeSignedIn =
+    () => {
+      const accessTokenValue = sessionStorage.getItem("accessToken") || localStorage.getItem("accessToken");
+      const refreshTokenValue = sessionStorage.getItem("refreshToken") || localStorage.getItem("refreshToken");
+      const userValue = sessionStorage.getItem("user") || localStorage.getItem("user");
+      const tokenCreationTime = sessionStorage.getItem("tokenCreationTime") || localStorage.getItem("tokenCreationTime");
+      const tokenExpirationTime = sessionStorage.getItem("tokenExpirationTime") || localStorage.getItem("tokenExpirationTime");
+      const refreshTokenCreationTime = sessionStorage.getItem("refreshTokenCreationTime") || localStorage.getItem("refreshTokenCreationTime");
+      const refreshTokenExpirationTime = sessionStorage.getItem("refreshTokenExpirationTime") || localStorage.getItem("refreshTokenExpirationTime");
+
+      if (accessTokenValue) {
+        localStorage.setItem("accessToken", accessTokenValue);
+      }
+
+      if (refreshTokenValue) {
+        localStorage.setItem("refreshToken", refreshTokenValue);
+      }
+
+      if (userValue) {
+        localStorage.setItem("user", userValue);
+      }
+
+      if (tokenCreationTime) {
+        localStorage.setItem("tokenCreationTime", tokenCreationTime);
+      }
+
+      if (tokenExpirationTime) {
+        localStorage.setItem("tokenExpirationTime", tokenExpirationTime);
+      }
+
+      if (refreshTokenCreationTime) {
+        localStorage.setItem("refreshTokenCreationTime", refreshTokenCreationTime);
+      }
+
+      if (refreshTokenExpirationTime) {
+        localStorage.setItem("refreshTokenExpirationTime", refreshTokenExpirationTime);
+      }
+
+      clearStorage(
+        sessionStorage
+      );
+    };
+
+  const forceLogout =
+    useCallback(() => {
+      console.log(
+        "[AUTH] Force logout triggered"
+      );
+
+      logout();
+    }, [logout]);
 
   return (
     <AuthContext.Provider
@@ -337,15 +830,21 @@ export const AuthProvider = ({ children }) => {
         user,
         isLoading,
         error,
+
         accessToken,
         refreshToken,
+
         register,
         login,
         logout,
+
         fetchAllAccounts,
+
         refreshTokens,
+        refreshUserProfile,
+
         enableKeepMeSignedIn,
-        forceLogout
+        forceLogout,
       }}
     >
       {children}
@@ -354,9 +853,14 @@ export const AuthProvider = ({ children }) => {
 };
 
 export const useAuth = () => {
-  const context = useContext(AuthContext);
+  const context =
+    useContext(AuthContext);
+
   if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    throw new Error(
+      "useAuth must be used within an AuthProvider"
+    );
   }
+
   return context;
 };

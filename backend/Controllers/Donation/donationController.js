@@ -1,526 +1,1318 @@
-import Donation from '../../models/Donation.js';
-import Request from '../../models/Requests.js';
-import User from '../../models/User.js';
-import { Notification } from '../../models/Notification.js';
+import Donation from "../../models/Donation.js";
+import Request from "../../models/Requests.js";
+import User from "../../models/User.js";
+import { Notification } from "../../models/Notification.js";
 
-const generateDonationId = () => {
-    return `donation-${Date.now()}-${Math.random()
+const generateDonationId = () =>
+    `donation - ${Date.now()} -${Math.random()
         .toString(36)
-        .substring(2, 8)}`;
+        .substring(2, 8)
+    } `;
+
+const createHttpError = (
+    statusCode,
+    message
+) => {
+    const error = new Error(message);
+    error.statusCode = statusCode;
+
+    return error;
 };
 
-const createDonation = async (req, res) => {
+/*
+ * Create a donation record for an assigned donor.
+ */
+const createDonation = async (
+    req,
+    res
+) => {
     try {
-        const donorUid = req.user?.uid;
-        const { requestId } = req.params;
+        const donorUid =
+            req.user?.uid;
+
+        const { requestId } =
+            req.params;
 
         if (!donorUid) {
             return res.status(401).json({
-                error: 'Authentication required',
+                error:
+                    "Authentication required",
             });
         }
 
         if (!requestId) {
             return res.status(400).json({
-                error: 'Request ID is required',
+                error:
+                    "Request ID is required",
             });
         }
 
-        // Find donor
-        const donor = await User.findOne({
-            uid: donorUid,
-            role: 'donor',
-        });
+        const donor =
+            await User.findOne({
+                uid: donorUid,
+                role: "donor",
+            });
 
         if (!donor) {
             return res.status(404).json({
-                error: 'Donor not found',
+                error: "Donor not found",
             });
         }
 
-        // Donor must be verified
         if (!donor.verifiedByAdmin) {
             return res.status(403).json({
-                error: 'Account pending admin verification',
-                code: 'ACCOUNT_NOT_VERIFIED',
+                error:
+                    "Account pending admin verification",
+                code:
+                    "ACCOUNT_NOT_VERIFIED",
                 verificationPending: true,
             });
         }
 
-        // Find blood request
-        const request = await Request.findById(requestId);
+        if (
+            donor.status !== "eligible"
+        ) {
+            return res.status(403).json({
+                error:
+                    "You are not currently eligible to donate",
+                code:
+                    "DONOR_NOT_ELIGIBLE",
+            });
+        }
+
+        const request =
+            await Request.findById(
+                requestId
+            );
 
         if (!request) {
             return res.status(404).json({
-                error: 'Blood request not found',
+                error:
+                    "Blood request not found",
             });
         }
 
-        if (request.status !== 'pending') {
-            return res.status(400).json({
-                error: 'This blood request is no longer active',
-            });
-        }
-
-        // Check donor assignment
-        const donorAssignment = request.assignedDonors?.find(
-            (assignment) => assignment.donorUid === donorUid
-        );
-
-        if (!donorAssignment) {
-            return res.status(403).json({
-                error: 'You are not assigned to this blood request',
-            });
-        }
-
-        // Check if donation already exists
-        const existingDonation = await Donation.findOne({
-            donorUid,
-            requestId: request._id,
-        });
-
-        if (existingDonation) {
-            return res.status(409).json({
-                error: 'Donation record already exists',
-                donation: existingDonation,
-            });
-        }
-
-        const donation = new Donation({
-            donationId: generateDonationId(),
-            donorUid,
-            requestId: request._id,
-            unitsAssigned: donorAssignment.unitsAssigned,
-            unitsCompleted: 0,
-            status: 'pending_confirmation',
-        });
-
-        await donation.save();
-
-        res.status(201).json({
-            message: 'Donation record created successfully',
-            donation,
-        });
-    } catch (error) {
-        console.error(
-            '[DONATION] Create error:',
-            error.message
-        );
-
-        res.status(500).json({
-            error: 'Failed to create donation record',
-        });
-    }
-};
-
-
-const donorCompleteDonation = async (req, res) => {
-    try {
-        const donorUid = req.user?.uid;
-        const { donationId } = req.params;
-
-        if (!donorUid) {
-            return res.status(401).json({
-                error: 'Authentication required',
-            });
-        }
-
-        const donation = await Donation.findOne({
-            donationId,
-            donorUid,
-        });
-
-        if (!donation) {
-            return res.status(404).json({
-                error: 'Donation record not found',
-            });
-        }
-
-        if (donation.status === 'approved') {
-            return res.status(400).json({
-                error: 'This donation has already been approved',
-            });
-        }
-
-        if (donation.status === 'pending_admin_approval') {
-            return res.status(400).json({
-                error: 'This donation is already waiting for admin approval',
-            });
-        }
-
-        if (donation.status === 'cancelled') {
-            return res.status(400).json({
-                error: 'This donation has been cancelled',
-            });
-        }
-
-        // Mark donor confirmation
-        donation.donorCompletedAt = new Date();
-
-        // Units are completed according to assignment
-        donation.unitsCompleted = donation.unitsAssigned;
-
-        // IMPORTANT:
-        // Do not update User or Request yet.
-        // Admin must approve first.
-        donation.status = 'pending_admin_approval';
-
-        await donation.save();
-
-        // Get donor information
-        const donor = await User.findOne({
-            uid: donorUid,
-        });
-
-        console.log(
-            `[DONATION] Donor ${donorUid} submitted completed donation ${donationId} for admin approval`
-        );
-
-        res.json({
-            message:
-                'Donation completion submitted successfully. Waiting for admin approval.',
-            donation,
-            donor: donor
-                ? {
-                    uid: donor.uid,
-                    fname: donor.fname,
-                    lname: donor.lname,
-                }
-                : null,
-        });
-    } catch (error) {
-        console.error(
-            '[DONATION] Complete error:',
-            error.message
-        );
-
-        res.status(500).json({
-            error: 'Failed to submit donation completion',
-        });
-    }
-};
-
-
-/**
- * Admin gets donations waiting for approval.
- */
-const getPendingDonations = async (req, res) => {
-    try {
-        const donations = await Donation.find({
-            status: 'pending_admin_approval',
-        })
-            .populate(
-                'requestId',
-                'id fname fatherName lname bloodType bloodGenre hospital unitsNeeded status'
-            )
-            .sort({
-                donorCompletedAt: 1,
-            });
-
-        // Attach donor data
-        const result = await Promise.all(
-            donations.map(async (donation) => {
-                const donor = await User.findOne({
-                    uid: donation.donorUid,
-                }).select(
-                    'uid fname lname email phone bloodType'
-                );
-
-                return {
-                    ...donation.toObject(),
-                    donor,
-                };
-            })
-        );
-
-        res.json(result);
-    } catch (error) {
-        console.error(
-            '[DONATION] Pending donations error:',
-            error.message
-        );
-
-        res.status(500).json({
-            error: 'Failed to fetch pending donations',
-        });
-    }
-};
-
-
-const approveDonation = async (req, res) => {
-    try {
-        const adminUid = req.user?.uid;
-        const { donationId } = req.params;
-
-        if (!adminUid) {
-            return res.status(401).json({
-                error: 'Authentication required',
-            });
-        }
-
-        const donation = await Donation.findOne({
-            donationId,
-        });
-
-        if (!donation) {
-            return res.status(404).json({
-                error: 'Donation not found',
-            });
-        }
-
-        if (donation.status !== 'pending_admin_approval') {
+        if (
+            request.status !== "pending"
+        ) {
             return res.status(400).json({
                 error:
-                    'Only donations pending admin approval can be approved',
+                    "This blood request is no longer active",
             });
         }
 
-        // Find donor
-        const donor = await User.findOne({
-            uid: donation.donorUid,
-            role: 'donor',
-        });
-
-        if (!donor) {
-            return res.status(404).json({
-                error: 'Donor not found',
-            });
-        }
-
-        // Find request
-        const request = await Request.findById(
-            donation.requestId
-        );
-
-        if (!request) {
-            return res.status(404).json({
-                error: 'Blood request not found',
-            });
-        }
-
-        // Find donor assignment
         const donorAssignment =
             request.assignedDonors?.find(
                 (assignment) =>
-                    assignment.donorUid === donation.donorUid
+                    assignment.donorUid ===
+                    donorUid
             );
 
         if (!donorAssignment) {
-            return res.status(400).json({
+            return res.status(403).json({
                 error:
-                    'Donor assignment no longer exists for this request',
+                    "You are not assigned to this blood request",
             });
         }
 
-        donation.status = 'approved';
-
-        donation.adminApprovedAt = new Date();
-
-        donation.adminApprovedBy = adminUid;
-
-        donation.donationDate = new Date();
-
-        await donation.save();
-
-        donor.donationCount =
-            (donor.donationCount || 0) +
-            donation.unitsCompleted;
-
-        donor.lastDonationDate = new Date();
-
-        donor.status = 'cool-down';
-
-        donor.updatedAt = new Date();
-
-        await donor.save();
-
-        donorAssignment.unitsCompleted =
-            donation.unitsCompleted;
-
-        const totalCompleted =
-            request.assignedDonors.reduce(
-                (total, assignment) =>
-                    total + (assignment.unitsCompleted || 0),
-                0
-            );
-
         if (
-            totalCompleted >= request.unitsNeeded
+            (donorAssignment.unitsCompleted ||
+                0) >=
+            (donorAssignment.unitsAssigned ||
+                0)
         ) {
-            request.status = 'fulfilled';
+            return res.status(409).json({
+                error:
+                    "This assignment is already completed",
+            });
         }
 
-        request.updatedAt = new Date();
+        const existingDonation =
+            await Donation.findOne({
+                donorUid,
+                requestId:
+                    request._id,
+            });
 
-        await request.save();
+        if (existingDonation) {
+            /*
+             * A rejected confirmation may be
+             * opened again for resubmission.
+             */
+            if (
+                existingDonation.status ===
+                "rejected"
+            ) {
+                existingDonation.status =
+                    "pending_confirmation";
 
+                existingDonation.unitsAssigned =
+                    donorAssignment.unitsAssigned;
 
-        console.log(
-            `[AUDIT] Admin ${adminUid} approved donation ${donationId}`
-        );
+                existingDonation.unitsCompleted =
+                    0;
 
+                existingDonation.rejectionReason =
+                    null;
 
-        res.json({
+                existingDonation.rejectedAt =
+                    null;
+
+                existingDonation.rejectedBy =
+                    null;
+
+                existingDonation.donorCompletedAt =
+                    null;
+
+                existingDonation.adminApprovedAt =
+                    null;
+
+                existingDonation.adminApprovedBy =
+                    null;
+
+                existingDonation.donationDate =
+                    null;
+
+                existingDonation.updatedAt =
+                    new Date();
+
+                await existingDonation.save();
+
+                return res.json({
+                    message:
+                        "Donation record reopened",
+                    donation:
+                        existingDonation,
+                });
+            }
+
+            return res.status(409).json({
+                error:
+                    "Donation record already exists",
+                donation:
+                    existingDonation,
+            });
+        }
+
+        const donation =
+            await Donation.create({
+                donationId:
+                    generateDonationId(),
+
+                donorUid,
+
+                requestId:
+                    request._id,
+
+                unitsAssigned:
+                    donorAssignment.unitsAssigned,
+
+                unitsCompleted: 0,
+
+                status:
+                    "pending_confirmation",
+            });
+
+        res.status(201).json({
             message:
-                'Donation approved and recorded successfully',
-
+                "Donation record created successfully",
             donation,
-
-            donor: {
-                uid: donor.uid,
-                fname: donor.fname,
-                lname: donor.lname,
-                bloodType: donor.bloodType,
-                donationCount: donor.donationCount,
-                lastDonationDate:
-                    donor.lastDonationDate,
-                status: donor.status,
-            },
-
-            request: {
-                id: request.id,
-                status: request.status,
-                unitsNeeded: request.unitsNeeded,
-                totalCompleted,
-            },
         });
     } catch (error) {
         console.error(
-            '[DONATION] Approval error:',
-            error.message
+            "[DONATION] Create error:",
+            error
         );
 
         res.status(500).json({
-            error: 'Failed to approve donation',
+            error:
+                "Failed to create donation record",
         });
     }
 };
 
+/*
+ * Donor confirms that the donation took place.
+ * The donation is not counted until admin approval.
+ */
+const donorCompleteDonation =
+    async (req, res) => {
+        try {
+            const donorUid =
+                req.user?.uid;
 
-// Admin rejects donor's completion claim.
-const rejectDonation = async (req, res) => {
+            const { donationId } =
+                req.params;
+
+            if (!donorUid) {
+                return res
+                    .status(401)
+                    .json({
+                        error:
+                            "Authentication required",
+                    });
+            }
+
+            if (!donationId) {
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "Donation ID is required",
+                    });
+            }
+
+            const donation =
+                await Donation.findOne({
+                    donationId,
+                    donorUid,
+                });
+
+            if (!donation) {
+                return res
+                    .status(404)
+                    .json({
+                        error:
+                            "Donation record not found",
+                    });
+            }
+
+            if (
+                donation.status ===
+                "approved"
+            ) {
+                return res
+                    .status(409)
+                    .json({
+                        error:
+                            "This donation has already been approved",
+                        donation,
+                    });
+            }
+
+            if (
+                donation.status ===
+                "pending_admin_approval"
+            ) {
+                return res
+                    .status(409)
+                    .json({
+                        error:
+                            "This donation is already waiting for admin approval",
+                        donation,
+                    });
+            }
+
+            if (
+                donation.status ===
+                "cancelled"
+            ) {
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "This donation has been cancelled",
+                    });
+            }
+
+            if (
+                ![
+                    "pending_confirmation",
+                    "rejected",
+                ].includes(
+                    donation.status
+                )
+            ) {
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "This donation cannot be submitted for approval",
+                    });
+            }
+
+            const donor =
+                await User.findOne({
+                    uid: donorUid,
+                    role: "donor",
+                });
+
+            if (!donor) {
+                return res
+                    .status(404)
+                    .json({
+                        error:
+                            "Donor not found",
+                    });
+            }
+
+            if (
+                !donor.verifiedByAdmin
+            ) {
+                return res
+                    .status(403)
+                    .json({
+                        error:
+                            "Account pending admin verification",
+                        code:
+                            "ACCOUNT_NOT_VERIFIED",
+                    });
+            }
+
+            const request =
+                await Request.findById(
+                    donation.requestId
+                );
+
+            if (!request) {
+                return res
+                    .status(404)
+                    .json({
+                        error:
+                            "Blood request not found",
+                    });
+            }
+
+            const donorAssignment =
+                request.assignedDonors?.find(
+                    (assignment) =>
+                        assignment.donorUid ===
+                        donorUid
+                );
+
+            if (!donorAssignment) {
+                return res
+                    .status(403)
+                    .json({
+                        error:
+                            "Donor assignment no longer exists",
+                    });
+            }
+
+            if (
+                (donorAssignment.unitsCompleted ||
+                    0) > 0
+            ) {
+                return res
+                    .status(409)
+                    .json({
+                        error:
+                            "This assignment is already completed",
+                    });
+            }
+
+            const confirmedAt =
+                new Date();
+
+            donation.rejectionReason =
+                null;
+
+            donation.rejectedAt =
+                null;
+
+            donation.rejectedBy =
+                null;
+
+            donation.donorCompletedAt =
+                confirmedAt;
+
+            donation.unitsAssigned =
+                donorAssignment.unitsAssigned;
+
+            donation.unitsCompleted =
+                donorAssignment.unitsAssigned;
+
+            donation.status =
+                "pending_admin_approval";
+
+            donation.updatedAt =
+                confirmedAt;
+
+            await donation.save();
+
+            /*
+             * Remove older unresolved notifications
+             * before creating fresh ones.
+             */
+            await Notification.deleteMany({
+                type:
+                    "donation_pending_approval",
+
+                donationId:
+                    donation.donationId,
+
+                actionTaken: false,
+            });
+
+            const admins =
+                await User.find({
+                    role: "super_admin",
+                }).select("uid");
+
+            if (admins.length > 0) {
+                const notificationTime =
+                    Date.now();
+
+                const adminNotifications = admins.map((admin) => ({
+                    adminId: admin.uid,
+
+                    donorId: donorUid,
+
+                    requestId:
+                        donation.requestId,
+
+                    donationId:
+                        donation.donationId,
+
+                    type:
+                        "donation_pending_approval",
+
+                    title:
+                        "Donation Completion Requires Approval",
+
+                    message:
+                        `${donor.fname || ""} ${donor.lname || ""}`.trim() +
+                        ` confirmed ${donation.unitsCompleted} unit(s). ` +
+                        "Approve or reject this completion.",
+
+                    read: false,
+
+                    actionTaken: false,
+
+                    action: null,
+
+                    createdAt: confirmedAt,
+                }));
+
+                await Notification.insertMany(
+                    adminNotifications
+                );
+            }
+
+            console.log(
+                `[DONATION] Donor ${donorUid} submitted ${donationId} for admin approval`
+            );
+
+            res.json({
+                message:
+                    "Donation submitted for admin approval",
+                donation,
+            });
+        } catch (error) {
+            console.error(
+                "[DONATION] Completion submission error:",
+                error
+            );
+
+            res.status(500).json({
+                error:
+                    "Failed to submit donation completion",
+            });
+        }
+    };
+
+/*
+ * Admin retrieves donations awaiting approval.
+ */
+const getPendingDonations =
+    async (req, res) => {
+        try {
+            const donations =
+                await Donation.find({
+                    status:
+                        "pending_admin_approval",
+                })
+                    .populate(
+                        "requestId",
+                        "id fname fatherName lname bloodType bloodGenre hospital unitsNeeded status date description"
+                    )
+                    .sort({
+                        donorCompletedAt: 1,
+                    })
+                    .lean();
+
+            const donorUids = [
+                ...new Set(
+                    donations.map(
+                        (donation) =>
+                            donation.donorUid
+                    )
+                ),
+            ];
+
+            const donors =
+                await User.find({
+                    uid: {
+                        $in: donorUids,
+                    },
+                })
+                    .select(
+                        "uid fname lname email phone bloodType status"
+                    )
+                    .lean();
+
+            const donorMap =
+                new Map(
+                    donors.map((donor) => [
+                        donor.uid,
+                        donor,
+                    ])
+                );
+
+            const result =
+                donations.map(
+                    (donation) => ({
+                        ...donation,
+                        donor:
+                            donorMap.get(
+                                donation.donorUid
+                            ) || null,
+                    })
+                );
+
+            res.json(result);
+        } catch (error) {
+            console.error(
+                "[DONATION] Pending donations error:",
+                error
+            );
+
+            res.status(500).json({
+                error:
+                    "Failed to fetch pending donations",
+            });
+        }
+    };
+
+/*
+ * Admin approves a donation confirmation.
+ */
+const approveDonation = async (
+    req,
+    res
+) => {
+    const session =
+        await Donation.startSession();
+
     try {
-        const adminUid = req.user?.uid;
-        const { donationId } = req.params;
-        const { rejectionReason } = req.body;
+        const adminUid =
+            req.user?.uid;
+
+        const { donationId } =
+            req.params;
 
         if (!adminUid) {
             return res.status(401).json({
-                error: 'Authentication required',
+                error:
+                    "Authentication required",
             });
         }
 
-        const donation = await Donation.findOne({
-            donationId,
-        });
-
-        if (!donation) {
-            return res.status(404).json({
-                error: 'Donation not found',
-            });
-        }
-
-        if (
-            donation.status !==
-            'pending_admin_approval'
-        ) {
+        if (!donationId) {
             return res.status(400).json({
                 error:
-                    'Only pending donations can be rejected',
+                    "Donation ID is required",
             });
         }
 
-        donation.status = 'rejected';
+        let responseData;
 
-        donation.rejectionReason =
-            rejectionReason ||
-            'Donation completion was rejected by admin';
+        await session.withTransaction(
+            async () => {
+                const donation =
+                    await Donation.findOne({
+                        donationId,
+                    }).session(session);
 
-        donation.updatedAt = new Date();
+                if (!donation) {
+                    throw createHttpError(
+                        404,
+                        "Donation not found"
+                    );
+                }
 
-        await donation.save();
+                if (
+                    donation.status ===
+                    "approved"
+                ) {
+                    throw createHttpError(
+                        409,
+                        "This donation has already been approved"
+                    );
+                }
+
+                if (
+                    donation.status !==
+                    "pending_admin_approval"
+                ) {
+                    throw createHttpError(
+                        400,
+                        "Only donations pending admin approval can be approved"
+                    );
+                }
+
+                const donor =
+                    await User.findOne({
+                        uid:
+                            donation.donorUid,
+                        role: "donor",
+                    }).session(session);
+
+                if (!donor) {
+                    throw createHttpError(
+                        404,
+                        "Donor not found"
+                    );
+                }
+
+                const request =
+                    await Request.findById(
+                        donation.requestId
+                    ).session(session);
+
+                if (!request) {
+                    throw createHttpError(
+                        404,
+                        "Blood request not found"
+                    );
+                }
+
+                const donorAssignment =
+                    request.assignedDonors?.find(
+                        (assignment) =>
+                            assignment.donorUid ===
+                            donation.donorUid
+                    );
+
+                if (!donorAssignment) {
+                    throw createHttpError(
+                        400,
+                        "Donor assignment no longer exists"
+                    );
+                }
+
+                if (
+                    (donorAssignment.unitsCompleted ||
+                        0) > 0
+                ) {
+                    throw createHttpError(
+                        409,
+                        "This assignment is already completed"
+                    );
+                }
+
+                const approvedAt =
+                    new Date();
+
+                donation.status =
+                    "approved";
+
+                donation.adminApprovedAt =
+                    approvedAt;
+
+                donation.adminApprovedBy =
+                    adminUid;
+
+                donation.donationDate =
+                    approvedAt;
+
+                donation.updatedAt =
+                    approvedAt;
+
+                await donation.save({
+                    session,
+                });
+
+                donorAssignment.unitsCompleted =
+                    donation.unitsCompleted;
+
+                donorAssignment.completedAt =
+                    approvedAt;
+
+                const totalCompleted =
+                    request.assignedDonors.reduce(
+                        (total, assignment) =>
+                            total +
+                            Number(
+                                assignment.unitsCompleted ||
+                                0
+                            ),
+                        0
+                    );
+
+                if (
+                    totalCompleted >=
+                    request.unitsNeeded
+                ) {
+                    request.status =
+                        "fulfilled";
+                } else {
+                    request.status =
+                        "pending";
+                }
+
+                request.updatedAt =
+                    approvedAt;
+
+                await request.save({
+                    session,
+                });
+
+                const nextEligibleDate =
+                    new Date(approvedAt);
+
+                nextEligibleDate.setDate(
+                    nextEligibleDate.getDate() +
+                    56
+                );
+
+                donor.donationCount =
+                    Number(
+                        donor.donationCount || 0
+                    ) +
+                    Number(
+                        donation.unitsCompleted ||
+                        0
+                    );
+
+                donor.lastDonationDate =
+                    approvedAt;
+
+                donor.nextEligibleDate =
+                    nextEligibleDate;
+
+                donor.status =
+                    "cool-down";
+
+                donor.updatedAt =
+                    approvedAt;
+
+                await donor.save({
+                    session,
+                });
+
+                console.log(
+                    "[DONATION] Cooldown saved:",
+                    {
+                        donorUid: donor.uid,
+                        status: donor.status,
+                        lastDonationDate:
+                            donor.lastDonationDate,
+                        nextEligibleDate:
+                            donor.nextEligibleDate,
+                        approvedAt,
+                        daysDifference:
+                            Math.ceil(
+                                (
+                                    donor.nextEligibleDate.getTime() -
+                                    approvedAt.getTime()
+                                ) /
+                                (24 * 60 * 60 * 1000)
+                            ),
+                    }
+                );
+
+                await Notification.updateMany(
+                    {
+                        type:
+                            "donation_pending_approval",
+                        donationId,
+                    },
+                    {
+                        $set: {
+                            read: true,
+                            readAt:
+                                approvedAt,
+                            actionTaken:
+                                true,
+                            action:
+                                "approved",
+                        },
+                    },
+                    {
+                        session,
+                    }
+                );
+
+                await Notification.create(
+                    [
+                        {
+                            donorId: donation.donorUid,
+
+                            requestId: donation.requestId,
+
+                            donationId,
+
+                            type: "donation_approved",
+
+                            title: "Donation Approved",
+
+                            message:
+                                `Your donation of ${donation.unitsCompleted} unit(s) was approved. ` +
+                                `You can donate again after ${nextEligibleDate.toLocaleDateString()}.`,
+
+                            read: false,
+
+                            actionTaken: false,
+
+                            action: null,
+
+                            createdAt: approvedAt,
+                        },
+                    ],
+                    {
+                        session,
+                    }
+                );
+
+                responseData = {
+                    donation,
+
+                    donor: {
+                        uid: donor.uid,
+                        fname:
+                            donor.fname,
+                        lname:
+                            donor.lname,
+                        bloodType:
+                            donor.bloodType,
+                        donationCount:
+                            donor.donationCount,
+                        lastDonationDate:
+                            donor.lastDonationDate,
+                        nextEligibleDate:
+                            donor.nextEligibleDate,
+                        status:
+                            donor.status,
+                    },
+
+                    request: {
+                        id:
+                            request.id,
+                        _id:
+                            request._id,
+                        status:
+                            request.status,
+                        unitsNeeded:
+                            request.unitsNeeded,
+                        totalCompleted,
+                    },
+                };
+            }
+        );
 
         console.log(
-            `[AUDIT] Admin ${adminUid} rejected donation ${donationId}`
+            `[AUDIT] Admin ${adminUid} approved donation ${donationId} `
         );
 
         res.json({
-            message: 'Donation rejected successfully',
-            donation,
+            message:
+                "Donation approved successfully",
+            ...responseData,
         });
     } catch (error) {
         console.error(
-            '[DONATION] Rejection error:',
-            error.message
+            "[DONATION] Approval error:",
+            error
         );
 
-        res.status(500).json({
-            error: 'Failed to reject donation',
-        });
+        res
+            .status(
+                error.statusCode || 500
+            )
+            .json({
+                error:
+                    error.statusCode
+                        ? error.message
+                        : "Failed to approve donation",
+            });
+    } finally {
+        await session.endSession();
     }
 };
 
+/*
+ * Admin rejects a donor's completion claim.
+ */
+const rejectDonation = async (
+    req,
+    res
+) => {
+    const session =
+        await Donation.startSession();
 
-
-// Get donor's own donation history.
-
-const getMyDonations = async (req, res) => {
     try {
-        const donorUid = req.user?.uid;
+        const adminUid =
+            req.user?.uid;
 
-        if (!donorUid) {
+        const { donationId } =
+            req.params;
+
+        const reason =
+            req.body?.rejectionReason?.trim();
+
+        if (!adminUid) {
             return res.status(401).json({
-                error: 'Authentication required',
+                error:
+                    "Authentication required",
             });
         }
 
-        const donations = await Donation.find({
-            donorUid,
-        })
-            .populate(
-                'requestId',
-                'id fname fatherName lname bloodType bloodGenre hospital unitsNeeded status'
-            )
-            .sort({
-                createdAt: -1,
+        if (!donationId) {
+            return res.status(400).json({
+                error:
+                    "Donation ID is required",
             });
+        }
 
-        res.json(donations);
+        if (!reason) {
+            return res.status(400).json({
+                error:
+                    "Rejection reason is required",
+            });
+        }
+
+        if (reason.length > 500) {
+            return res.status(400).json({
+                error:
+                    "Rejection reason must not exceed 500 characters",
+            });
+        }
+
+        let responseDonation;
+
+        await session.withTransaction(
+            async () => {
+                const donation =
+                    await Donation.findOne({
+                        donationId,
+                    }).session(session);
+
+                if (!donation) {
+                    throw createHttpError(
+                        404,
+                        "Donation not found"
+                    );
+                }
+
+                if (
+                    donation.status !==
+                    "pending_admin_approval"
+                ) {
+                    throw createHttpError(
+                        400,
+                        "Only pending donations can be rejected"
+                    );
+                }
+
+                const request =
+                    await Request.findById(
+                        donation.requestId
+                    ).session(session);
+
+                if (!request) {
+                    throw createHttpError(
+                        404,
+                        "Blood request not found"
+                    );
+                }
+
+                const donorAssignment =
+                    request.assignedDonors?.find(
+                        (assignment) =>
+                            assignment.donorUid ===
+                            donation.donorUid
+                    );
+
+                if (!donorAssignment) {
+                    throw createHttpError(
+                        400,
+                        "Donor assignment no longer exists"
+                    );
+                }
+
+                const rejectedAt =
+                    new Date();
+
+                donation.status =
+                    "rejected";
+
+                donation.rejectionReason =
+                    reason;
+
+                donation.rejectedAt =
+                    rejectedAt;
+
+                donation.rejectedBy =
+                    adminUid;
+
+                donation.donorCompletedAt =
+                    null;
+
+                donation.unitsCompleted =
+                    0;
+
+                donation.updatedAt =
+                    rejectedAt;
+
+                await donation.save({
+                    session,
+                });
+
+                donorAssignment.unitsCompleted =
+                    0;
+
+                donorAssignment.completedAt =
+                    null;
+
+                const totalCompleted =
+                    request.assignedDonors.reduce(
+                        (total, assignment) =>
+                            total +
+                            Number(
+                                assignment.unitsCompleted ||
+                                0
+                            ),
+                        0
+                    );
+
+                if (
+                    totalCompleted <
+                    request.unitsNeeded
+                ) {
+                    request.status =
+                        "pending";
+                }
+
+                request.updatedAt =
+                    rejectedAt;
+
+                await request.save({
+                    session,
+                });
+
+                /*
+                 * Do not change donationCount.
+                 * Do not cancel a cooldown from an older
+                 * approved donation.
+                 */
+                const donor =
+                    await User.findOne({
+                        uid:
+                            donation.donorUid,
+                        role: "donor",
+                    }).session(session);
+
+                if (donor) {
+                    const hasActiveCooldown =
+                        donor.nextEligibleDate &&
+                        new Date(
+                            donor.nextEligibleDate
+                        ) > rejectedAt;
+
+                    if (!hasActiveCooldown) {
+                        donor.status =
+                            "eligible";
+
+                        donor.nextEligibleDate =
+                            null;
+
+                        donor.updatedAt =
+                            rejectedAt;
+
+                        await donor.save({
+                            session,
+                        });
+                    }
+                }
+
+                await Notification.updateMany(
+                    {
+                        type:
+                            "donation_pending_approval",
+                        donationId,
+                    },
+                    {
+                        $set: {
+                            read: true,
+                            readAt:
+                                rejectedAt,
+                            actionTaken:
+                                true,
+                            action:
+                                "rejected",
+                        },
+                    },
+                    {
+                        session,
+                    }
+                );
+
+                await Notification.create(
+                    [
+                        {
+                            donorId: donation.donorUid,
+
+                            requestId: donation.requestId,
+
+                            donationId,
+
+                            type: "donation_rejected",
+
+                            title: "Donation Completion Rejected",
+
+                            message:
+                                `Your donation completion was rejected. Reason: ${reason}. ` +
+                                "The request is available again in your assigned requests.",
+
+                            read: false,
+
+                            actionTaken: false,
+
+                            action: null,
+
+                            createdAt: rejectedAt,
+                        },
+                    ],
+                    {
+                        session,
+                    }
+                );
+
+                responseDonation =
+                    donation;
+            }
+        );
+
+        console.log(
+            `[AUDIT] Admin ${adminUid} rejected donation ${donationId} `
+        );
+
+        res.json({
+            message:
+                "Donation completion rejected",
+            donation:
+                responseDonation,
+        });
     } catch (error) {
         console.error(
-            '[DONATION] History error:',
-            error.message
+            "[DONATION] Rejection error:",
+            error
+        );
+
+        res
+            .status(
+                error.statusCode || 500
+            )
+            .json({
+                error:
+                    error.statusCode
+                        ? error.message
+                        : "Failed to reject donation",
+            });
+    } finally {
+        await session.endSession();
+    }
+};
+
+/*
+ * Get donor's donation records.
+ */
+const getMyDonations = async (
+    req,
+    res
+) => {
+    try {
+        const donorUid =
+            req.user?.uid;
+
+        if (!donorUid) {
+            return res.status(401).json({
+                error:
+                    "Authentication required",
+            });
+        }
+
+        const donations =
+            await Donation.find({
+                donorUid,
+            })
+                .populate(
+                    "requestId",
+                    "id fname fatherName lname bloodType bloodGenre hospital unitsNeeded status date description"
+                )
+                .sort({
+                    createdAt: -1,
+                });
+
+        const approvedDonations =
+            donations.filter(
+                (donation) =>
+                    donation.status ===
+                    "approved"
+            );
+
+        const totalUnits =
+            approvedDonations.reduce(
+                (total, donation) =>
+                    total +
+                    Number(
+                        donation.unitsCompleted ||
+                        0
+                    ),
+                0
+            );
+
+        res.json({
+            history: donations,
+            count: totalUnits,
+            totalUnits,
+            donationCount:
+                totalUnits,
+            approvedDonationRecords:
+                approvedDonations.length,
+        });
+    } catch (error) {
+        console.error(
+            "[DONATION] History error:",
+            error
         );
 
         res.status(500).json({
-            error: 'Failed to fetch donation history',
+            error:
+                "Failed to fetch donation history",
         });
     }
 };
 
-
-// Admin gets all donations.
-
-const getAllDonations = async (req, res) => {
+/*
+ * Admin gets all donation records.
+ */
+const getAllDonations = async (
+    req,
+    res
+) => {
     try {
-        const donations = await Donation.find({})
-            .populate(
-                'requestId',
-                'id fname fatherName lname bloodType bloodGenre hospital unitsNeeded status'
-            )
-            .sort({
-                createdAt: -1,
-            });
+        const donations =
+            await Donation.find({})
+                .populate(
+                    "requestId",
+                    "id fname fatherName lname bloodType bloodGenre hospital unitsNeeded status date description"
+                )
+                .sort({
+                    createdAt: -1,
+                });
 
         res.json(donations);
     } catch (error) {
         console.error(
-            '[DONATION] Get all error:',
-            error.message
+            "[DONATION] Get all error:",
+            error
         );
 
         res.status(500).json({
-            error: 'Failed to fetch donations',
+            error:
+                "Failed to fetch donations",
         });
     }
 };

@@ -249,10 +249,14 @@ const loginUser = async (req, res) => {
     };
 
     // Add role-specific fields
-    if (user.role === 'donor') {
+    if (user.role === "donor") {
       userResponse.fname = user.fname;
       userResponse.lname = user.lname;
       userResponse.bloodType = user.bloodType;
+      userResponse.status = user.status;
+      userResponse.donationCount = user.donationCount || 0;
+      userResponse.lastDonationDate = user.lastDonationDate || null;
+      userResponse.nextEligibleDate = user.nextEligibleDate || null;
     } else if (user.role === 'super_admin') {
       userResponse.fname = user.superAdminFName;
       userResponse.lname = user.superAdminLName;
@@ -775,10 +779,145 @@ const logoutUser = async (req, res) => {
   }
 };
 
+const getCurrentUser = async (req, res) => {
+  try {
+    const uid = req.user?.uid;
+
+    if (!uid) {
+      return res.status(401).json({
+        error: "Authentication required",
+      });
+    }
+
+    const user = await User.findOne({
+      uid,
+    }).select(
+      "-password -refreshToken -refreshTokenHash"
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        error: "User not found",
+      });
+    }
+
+    /*
+     * Repair donor cooldown status.
+     */
+    if (user.role === "donor") {
+      const now = new Date();
+
+      const nextEligibleDate =
+        user.nextEligibleDate
+          ? new Date(user.nextEligibleDate)
+          : null;
+
+      const hasValidNextEligibleDate =
+        nextEligibleDate &&
+        !Number.isNaN(
+          nextEligibleDate.getTime()
+        );
+
+      /*
+       * Cooldown expired:
+       * restore eligibility.
+       */
+      if (
+        user.status === "cool-down" &&
+        hasValidNextEligibleDate &&
+        now >= nextEligibleDate
+      ) {
+        user.status = "eligible";
+        user.nextEligibleDate = null;
+        user.updatedAt = now;
+
+        await user.save();
+      }
+
+      /*
+       * Invalid state:
+       * status says cooldown but there is no valid date.
+       *
+       * Restore eligibility instead of leaving the
+       * donor permanently blocked.
+       */
+      if (
+        user.status === "cool-down" &&
+        !hasValidNextEligibleDate
+      ) {
+        console.warn(
+          `[AUTH] Repairing invalid cooldown for donor ${user.uid}: missing or invalid nextEligibleDate`
+        );
+
+        user.status = "eligible";
+        user.nextEligibleDate = null;
+        user.updatedAt = now;
+
+        await user.save();
+      }
+    }
+
+    console.log(
+      "[AUTH] Current user profile:",
+      {
+        uid: user.uid,
+        status: user.status,
+        lastDonationDate:
+          user.lastDonationDate,
+        nextEligibleDate:
+          user.nextEligibleDate,
+        donationCount:
+          user.donationCount,
+      }
+    );
+
+    res.json({
+      user: {
+        uid: user.uid,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+
+        fname: user.fname,
+        lname: user.lname,
+        bloodType: user.bloodType,
+
+        status: user.status,
+
+        donationCount:
+          user.donationCount || 0,
+
+        lastDonationDate:
+          user.lastDonationDate || null,
+
+        nextEligibleDate:
+          user.nextEligibleDate || null,
+
+        verifiedByAdmin:
+          Boolean(user.verifiedByAdmin),
+
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      },
+    });
+  } catch (error) {
+    console.error(
+      "[AUTH] Get current user error:",
+      error
+    );
+
+    res.status(500).json({
+      error:
+        "Failed to fetch current user profile",
+    });
+  }
+};
+
 // Export all controllers
 export default {
   getAllAccounts,
   registerDonor,
+  getCurrentUser,
   loginUser,
   refreshAccessToken,
   createDonorByAdmin,

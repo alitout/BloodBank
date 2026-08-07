@@ -4,6 +4,7 @@ import { useAuth } from "./AuthContext.jsx";
 import { useDataCache } from "./DataCacheContext.jsx";
 import { Clock, CheckCircle, Trash2 } from "lucide-react";
 import { authAPI } from "../utils/api.js";
+import AdminDonationApprovals from "./AdminDonationApprovals.jsx";
 
 export const PendingVerification = ({ user }) => {
   const { t, language } = useLanguage();
@@ -66,6 +67,7 @@ export const PendingVerification = ({ user }) => {
 
   return (
     <div className="space-y-6">
+      <AdminDonationApprovals />
       <div className="bg-gradient-to-r from-amber-600 to-orange-600 rounded-lg p-6 text-white">
         <div className="flex items-center gap-4">
           <Clock className="w-12 h-12 text-amber-200" />
@@ -81,11 +83,10 @@ export const PendingVerification = ({ user }) => {
       </div>
 
       {message && (
-        <div className={`p-4 rounded-lg font-semibold ${
-          messageType === "success"
+        <div className={`p-4 rounded-lg font-semibold ${messageType === "success"
             ? "bg-green-50 border border-green-200 text-green-800"
             : "bg-red-50 border border-red-200 text-red-800"
-        }`}>
+          }`}>
           {message}
         </div>
       )}
@@ -120,17 +121,16 @@ export const PendingVerification = ({ user }) => {
                         {pUser.role === "donor"
                           ? `${pUser.fname} ${pUser.lname}`
                           : pUser.role === "hospital"
-                          ? pUser.hospitalName
-                          : `${pUser.superAdminFName} ${pUser.superAdminLName}`}
+                            ? pUser.hospitalName
+                            : `${pUser.superAdminFName} ${pUser.superAdminLName}`}
                       </p>
                     </td>
                     <td className="px-6 py-4 text-sm text-center">{pUser.email}</td>
                     <td className="px-6 py-4 text-sm text-center">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                        pUser.role === "donor" ? "bg-blue-100 text-blue-800" :
-                        pUser.role === "hospital" ? "bg-red-100 text-red-800" :
-                        "bg-purple-100 text-purple-800"
-                      }`}>
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${pUser.role === "donor" ? "bg-blue-100 text-blue-800" :
+                          pUser.role === "hospital" ? "bg-red-100 text-red-800" :
+                            "bg-purple-100 text-purple-800"
+                        }`}>
                         {t(`role_${pUser.role}`)}
                       </span>
                     </td>

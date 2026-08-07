@@ -228,35 +228,39 @@ export const DonorProfilePage = () => {
             </div>
 
             {/* Eligibility Info */}
-            {user?.status === 'cool-down' && user?.lastDonationDate && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-yellow-800 font-semibold mb-2">
-                  {language === "ar" ? "فترة الراحة" : "Cool-down Period"}
-                </p>
-                <p className="text-yellow-700 text-sm mb-2">
-                  {language === "ar" 
-                    ? "يجب أن تنتظر 56 يوماً من آخر تبرع قبل التبرع مرة أخرى"
-                    : "You must wait 56 days from your last donation before donating again"
-                  }
-                </p>
-                <p className="text-yellow-700 text-sm">
-                  {language === "ar" ? "آخر تبرع: " : "Last donation: "}
-                  <span className="font-semibold">
-                    {new Date(user.lastDonationDate).toLocaleDateString(
-                      language === "ar" ? "ar-SA" : "en-US"
-                    )}
-                  </span>
-                </p>
-                <p className="text-yellow-700 text-sm mt-1">
-                  {language === "ar" ? "يمكنك التبرع مرة أخرى من: " : "You can donate again on: "}
-                  <span className="font-semibold">
-                    {new Date(new Date(user.lastDonationDate).getTime() + 56 * 24 * 60 * 60 * 1000).toLocaleDateString(
-                      language === "ar" ? "ar-SA" : "en-US"
-                    )}
-                  </span>
-                </p>
-              </div>
-            )}
+            {user?.status === "cool-down" &&
+              user?.nextEligibleDate &&
+              new Date(
+                user.nextEligibleDate
+              ) > new Date() && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <p className="text-yellow-800 font-semibold mb-2">
+                    {language === "ar" ? "فترة الراحة" : "Cool-down Period"}
+                  </p>
+                  <p className="text-yellow-700 text-sm mb-2">
+                    {language === "ar"
+                      ? "يجب أن تنتظر 56 يوماً من آخر تبرع قبل التبرع مرة أخرى"
+                      : "You must wait 56 days from your last donation before donating again"
+                    }
+                  </p>
+                  <p className="text-yellow-700 text-sm">
+                    {language === "ar" ? "آخر تبرع: " : "Last donation: "}
+                    <span className="font-semibold">
+                      {new Date(user.lastDonationDate).toLocaleDateString(
+                        language === "ar" ? "ar-SA" : "en-US"
+                      )}
+                    </span>
+                  </p>
+                  <p className="text-yellow-700 text-sm mt-1">
+                    {language === "ar" ? "يمكنك التبرع مرة أخرى من: " : "You can donate again on: "}
+                    <span className="font-semibold">
+                      {new Date(user.nextEligibleDate).toLocaleDateString(
+                        language === "ar" ? "ar-SA" : "en-US"
+                      )}
+                    </span>
+                  </p>
+                </div>
+              )}
 
             {/* Contact & Profile Info */}
             <div className="bg-white rounded-lg p-6 border border-slate-200">
