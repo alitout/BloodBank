@@ -1,5 +1,5 @@
 // API Base URL - for production, use environment variable
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
+const BASE_URL = __API_BASE_URL__;
 
 
 // Header

@@ -12,8 +12,7 @@ const styleColors = {
 };
 
 export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ||
-  'http://localhost:3000/api';
+  __API_BASE_URL__;
 
 /**
  * Get access token from storage
@@ -69,6 +68,18 @@ const saveTokens = (
       refreshToken
     );
   }
+
+  window.dispatchEvent(
+    new CustomEvent(
+      'auth:tokens-refreshed',
+      {
+        detail: {
+          accessToken,
+          refreshToken
+        }
+      }
+    )
+  );
 };
 
 const clearTokens = () => {
@@ -78,59 +89,71 @@ const clearTokens = () => {
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
 };
+let refreshPromise = null;
 
 const refreshAccessTokenDirect = async () => {
-  const refreshToken = getRefreshToken();
-
-  if (!refreshToken) {
-    return null;
+  if (refreshPromise) {
+    return refreshPromise;
   }
 
-  try {
-    const response = await fetch(
-      `${API_BASE_URL}/auth/refresh-token`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          refreshToken,
-        }),
-      }
-    );
+  refreshPromise = (async () => {
+    const refreshToken = getRefreshToken();
 
-    if (!response.ok) {
-      clearTokens();
+    if (!refreshToken) {
       return null;
     }
 
-    const data = await response.json();
-
-    if (
-      data.accessToken &&
-      data.refreshToken
-    ) {
-      saveTokens(
-        data.accessToken,
-        data.refreshToken
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/auth/refresh-token`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+          body: JSON.stringify({
+            refreshToken,
+          }),
+        }
       );
 
-      return data.accessToken;
+      if (!response.ok) {
+        clearTokens();
+        return null;
+      }
+
+      const data = await response.json();
+
+      if (
+        data.accessToken &&
+        data.refreshToken
+      ) {
+        saveTokens(
+          data.accessToken,
+          data.refreshToken
+        );
+
+        return data.accessToken;
+      }
+
+      clearTokens();
+      return null;
+    } catch (error) {
+      console.error(
+        'Token refresh failed:',
+        error
+      );
+
+      clearTokens();
+      return null;
     }
+  })();
 
-    clearTokens();
-    return null;
-
-  } catch (error) {
-    console.error(
-      'Token refresh failed:',
-      error
-    );
-
-    clearTokens();
-
-    return null;
+  try {
+    return await refreshPromise;
+  } finally {
+    refreshPromise = null;
   }
 };
 

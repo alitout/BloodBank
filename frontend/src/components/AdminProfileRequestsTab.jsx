@@ -6,7 +6,7 @@ import { API_BASE_URL, getAccessToken } from "../utils/api.js";
 import { Check, X, User, Trash2 } from "lucide-react";
 import { ConfigurableTable } from "./ConfigurableTable.jsx";
 
-export const AdminProfileRequestsTab = () => {
+export const AdminProfileRequestsTab = ({ pendingOnly = false }) => {
   const { t, language } = useLanguage();
   const { user, accessToken } = useAuth();
   const { getCachedData, invalidateCache } = useDataCache();
@@ -68,6 +68,10 @@ export const AdminProfileRequestsTab = () => {
       if (!response.ok) throw new Error("Failed to approve request");
       setError("");
       fetchProfileRequests();
+
+      window.dispatchEvent(
+        new CustomEvent("admin-pending-updated")
+      );
     } catch (err) {
       setError(err.message);
     } finally {
@@ -76,22 +80,64 @@ export const AdminProfileRequestsTab = () => {
   };
 
   const handleReject = async (requestId) => {
+    const rejectionReason = window.prompt(
+      language === "ar"
+        ? "اكتب سبب رفض طلب تعديل الملف الشخصي:"
+        : "Enter the reason for rejecting this profile request:"
+    );
+
+    if (rejectionReason === null) {
+      return;
+    }
+
+    const trimmedReason = rejectionReason.trim();
+
+    if (!trimmedReason) {
+      setError(
+        language === "ar"
+          ? "سبب الرفض مطلوب."
+          : "A rejection reason is required."
+      );
+      return;
+    }
+
     setActionLoading(true);
+
     try {
       const token = getAccessToken();
-      if (!token) throw new Error('No authentication token found.');
-      const response = await fetch(`${API_BASE_URL}/auth/profile-requests/${requestId}`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ status: "rejected" }),
-      });
 
-      if (!response.ok) throw new Error("Failed to reject request");
+      if (!token) {
+        throw new Error("No authentication token found.");
+      }
+
+      const response = await fetch(
+        `${API_BASE_URL}/auth/profile-requests/${requestId}`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            status: "rejected",
+            rejectionReason: trimmedReason
+          })
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.message || "Failed to reject request");
+      }
+
       setError("");
-      fetchProfileRequests();
+      invalidateCache(user?.role, "profileRequests");
+      await fetchProfileRequests();
+
+      window.dispatchEvent(
+        new CustomEvent("admin-pending-updated")
+      );
     } catch (err) {
       setError(err.message);
     } finally {
@@ -222,7 +268,7 @@ export const AdminProfileRequestsTab = () => {
       ) : (
         <ConfigurableTable
           columns={columns}
-          data={requests}
+          data={pendingOnly ? pendingRequests : requests}
           title={t("profileChangeRequests")}
           actions={actions}
           searchableFields={["email", "requestType"]}

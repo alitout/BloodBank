@@ -5,7 +5,7 @@ import { AlertCircle, LogOut, LogIn, Save } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 // 🔧 TEST MODE - Shows console logs for testing
-const TEST_MODE = true;
+const TEST_MODE = false;
 const MODAL_WARNING_TIME = TEST_MODE ? 10 * 1000 : 5 * 60 * 1000; // 10 sec (test) / 5 min (prod)
 
 export const SessionExpirationModal = () => {

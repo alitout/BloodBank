@@ -8,7 +8,7 @@ export const PortalHospital = ({ user }) => {
   const { hospitals, addHospital } = useDB();
   const [searchTerm, setSearchTerm] = useState("");
 
-  const filtered = hospitals.filter(h => 
+  const filtered = hospitals.filter(h =>
     h.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -22,8 +22,8 @@ export const PortalHospital = ({ user }) => {
               {language === "ar" ? "شبكة المستشفيات" : "Hospitals Network"}
             </h3>
             <p className="text-slate-600 text-sm">
-              {language === "ar" 
-                ? "شبكة المستشفيات المعتمدة مع جمعية الإسعاف اللبنانية" 
+              {language === "ar"
+                ? "شبكة المستشفيات المعتمدة مع جمعية الإسعاف اللبنانية"
                 : "Approved hospital affiliates with Lebanese Succor Association"
               }
             </p>
@@ -51,7 +51,7 @@ export const PortalHospital = ({ user }) => {
               {hospital.location}
             </div>
             <div className="text-sm text-slate-600 mt-2">
-              {language === "ar" ? "الاتصال:" : "Contact:"} {hospital.contact}
+              {language === "ar" ? "الاتصال:" : "Contact:"} {hospital.phoneNumber || hospital.contact}
             </div>
             {hospital.verified && (
               <div className="mt-2 inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">

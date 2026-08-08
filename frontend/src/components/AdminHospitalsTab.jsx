@@ -20,10 +20,8 @@ export const AdminHospitalsTab = () => {
     id: "",
     name: "",
     location: "",
-    contact: "",
+    phoneNumber: "",
     address: "",
-    latitude: "",
-    longitude: "",
   });
 
   useEffect(() => {
@@ -68,17 +66,25 @@ export const AdminHospitalsTab = () => {
       id: `HOS-${Date.now()}`,
       name: "",
       location: "",
-      contact: "",
+      phoneNumber: "",
       address: "",
-      latitude: "",
-      longitude: "",
     });
     setShowModal(true);
   };
 
   const handleEdit = (hospital) => {
-    setEditingId(hospital._id || hospital.id);
-    setFormData(hospital);
+    setEditingId(
+      hospital._id || hospital.id
+    );
+
+    setFormData({
+      ...hospital,
+      phoneNumber:
+        hospital.phoneNumber ||
+        hospital.contact ||
+        '',
+    });
+
     setShowModal(true);
   };
 
@@ -134,11 +140,11 @@ export const AdminHospitalsTab = () => {
   const columns = [
     { key: "name", label: t("name"), visible: true },
     { key: "location", label: t("location"), visible: true },
-    { key: "contact", label: t("contact"), visible: true },
+    { key: "phoneNumber", label: t("phoneNumber"), visible: true },
     { key: "address", label: t("address"), visible: true },
   ];
 
-  const searchableFields = ["name", "location", "contact", "address"];
+  const searchableFields = ["name", "location", "phoneNumber", "address"];
 
   const actions = [
     {
@@ -212,9 +218,9 @@ export const AdminHospitalsTab = () => {
               />
               <input
                 type="text"
-                placeholder={t("contact")}
-                value={formData.contact}
-                onChange={(e) => setFormData({ ...formData, contact: e.target.value })}
+                placeholder={t("phoneNumber")}
+                value={formData.phoneNumber}
+                onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
                 className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
                 required
               />
@@ -225,26 +231,6 @@ export const AdminHospitalsTab = () => {
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                 className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
               />
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="number"
-                  placeholder={t("latitude")}
-                  value={formData.latitude}
-                  onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
-                  className="border border-slate-300 rounded px-3 py-2 text-sm"
-                  step="0.000001"
-                  required
-                />
-                <input
-                  type="number"
-                  placeholder={t("longitude")}
-                  value={formData.longitude}
-                  onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
-                  className="border border-slate-300 rounded px-3 py-2 text-sm"
-                  step="0.000001"
-                  required
-                />
-              </div>
               <div className="flex gap-2 pt-4">
                 <button
                   type="submit"

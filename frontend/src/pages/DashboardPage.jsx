@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useLanguage } from "../components/LanguageContext.jsx";
 import { useAuth } from "../components/AuthContext.jsx";
 import AppLayout from "../components/AppLayout.jsx";
@@ -13,10 +14,31 @@ import { DonorProfilePage } from "./DonorProfilePage.jsx";
 export default function DashboardPage() {
   const { language } = useLanguage();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState(() => {
-    const defaultTab = user?.role === "donor" ? "requests" : "seek-blood";
-    return localStorage.getItem("dashboardActiveTab") || defaultTab;
-  });
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] =
+    useState(() => {
+      const requestedTab =
+        new URLSearchParams(
+          window.location.search
+        ).get("tab");
+
+      if (requestedTab) {
+        return requestedTab;
+      }
+
+      const defaultTab =
+        user?.role === "donor"
+          ? "requests"
+          : "seek-blood";
+
+      return (
+        localStorage.getItem(
+          "dashboardActiveTab"
+        ) ||
+        defaultTab
+      );
+    });
 
   // Build tabs based on user role
   const getTabs = () => {
@@ -46,11 +68,68 @@ export default function DashboardPage() {
 
   const tabs = getTabs();
 
-  const handleTabClick = (tabId) => {
+  useEffect(() => {
+    const requestedTab =
+      new URLSearchParams(
+        location.search
+      ).get("tab");
+
+    const isValidTab =
+      tabs.some(
+        (tab) =>
+          tab.id === requestedTab
+      );
+
+    if (
+      requestedTab &&
+      isValidTab
+    ) {
+      setActiveTab(
+        requestedTab
+      );
+
+      localStorage.setItem(
+        "dashboardActiveTab",
+        requestedTab
+      );
+    }
+  }, [
+    location.search,
+    user?.role
+  ]);
+
+  const handleTabClick = (
+    tabId
+  ) => {
     setActiveTab(tabId);
-    localStorage.setItem("dashboardActiveTab", tabId);
-    // Close mobile menu
-    window.dispatchEvent(new CustomEvent("closeMobileMenu"));
+
+    localStorage.setItem(
+      "dashboardActiveTab",
+      tabId
+    );
+
+    const searchParams =
+      new URLSearchParams(
+        location.search
+      );
+
+    searchParams.set(
+      "tab",
+      tabId
+    );
+
+    navigate({
+      pathname:
+        location.pathname,
+      search:
+        `?${searchParams.toString()}`
+    });
+
+    window.dispatchEvent(
+      new CustomEvent(
+        "closeMobileMenu"
+      )
+    );
   };
 
   // Mobile menu component
@@ -60,11 +139,10 @@ export default function DashboardPage() {
         <button
           key={tab.id}
           onClick={() => handleTabClick(tab.id)}
-          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-semibold transition text-left ${
-            activeTab === tab.id
-              ? "bg-red-100 text-red-700 border-l-4 border-red-600"
-              : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-          }`}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-semibold transition text-left ${activeTab === tab.id
+            ? "bg-red-100 text-red-700 border-l-4 border-red-600"
+            : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+            }`}
         >
           <span>{tab.icon}</span>
           {tab.label}
@@ -82,11 +160,10 @@ export default function DashboardPage() {
             <button
               key={tab.id}
               onClick={() => handleTabClick(tab.id)}
-              className={`px-4 py-2 font-semibold text-sm transition whitespace-nowrap flex items-center gap-2 ${
-                activeTab === tab.id
-                  ? "text-red-600 border-b-2 border-red-600 -mb-2"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
+              className={`px-4 py-2 font-semibold text-sm transition whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id
+                ? "text-red-600 border-b-2 border-red-600 -mb-2"
+                : "text-slate-600 hover:text-slate-900"
+                }`}
             >
               <span>{tab.icon}</span>
               {tab.label}

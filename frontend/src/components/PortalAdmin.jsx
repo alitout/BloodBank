@@ -2,23 +2,77 @@ import React, { useState } from "react";
 import { useLanguage } from "./LanguageContext.jsx";
 import { useDB } from "./DBContext.jsx";
 import { useAuth } from "./AuthContext.jsx";
+import { useLocation } from "react-router-dom";
 import { BarChart3, Users, Activity, CheckCircle, Settings, Clock } from "lucide-react";
 import { AdminManagement } from "./AdminManagement.jsx";
 import { PendingVerification } from "./PendingVerification.jsx";
 import { AdminHospitalsTab } from "./AdminHospitalsTab.jsx";
 import { AdminAccountsTab } from "./AdminAccountsTab.jsx";
 import { AdminRequestsTab } from "./AdminRequestsTab.jsx";
-import { AdminProfileRequestsTab } from "./AdminProfileRequestsTab.jsx";
 import AdminDonationsTab from "./AdminDonationsTab.jsx";
 
 export const PortalAdmin = ({ user }) => {
   const { t, language } = useLanguage();
   const { requesters, donors, hospitals, appointments, updateRequesterStatus, fetchAdminData, refreshData, isLoading } = useDB();
   const { accounts } = useAuth();
-  const [activeTab, setActiveTab] = useState(() => {
-    // Load activeTab from localStorage on mount
-    return localStorage.getItem("adminActiveTab") || "overview";
-  });
+  const location = useLocation();
+  const [activeTab, setActiveTab] =
+    useState(() => {
+      const savedTab =
+        localStorage.getItem(
+          "adminActiveTab"
+        );
+
+      return savedTab === "profiles"
+        ? "pending"
+        : savedTab || "overview";
+    });
+
+  React.useEffect(() => {
+    const requestedTab =
+      new URLSearchParams(
+        location.search
+      ).get("tab");
+
+    const validTabs = [
+      "overview",
+      "requests",
+      "hospitals",
+      "donations",
+      "accounts",
+      "management",
+      "pending"
+    ];
+
+    if (
+      requestedTab &&
+      validTabs.includes(
+        requestedTab
+      )
+    ) {
+      setActiveTab(
+        requestedTab
+      );
+
+      localStorage.setItem(
+        "adminActiveTab",
+        requestedTab
+      );
+    }
+  }, [location.search]);
+
+  React.useEffect(() => {
+    const requestedTab =
+      new URLSearchParams(location.search).get("tab");
+
+    if (requestedTab) {
+      setActiveTab(requestedTab);
+      localStorage.setItem(
+        "adminActiveTab",
+        requestedTab
+      );
+    }
+  }, [location.search]);
 
   React.useEffect(() => {
     const loadAdminDashboard = async () => {
@@ -34,6 +88,7 @@ export const PortalAdmin = ({ user }) => {
 
     loadAdminDashboard();
   }, []);
+
   // Save activeTab to localStorage whenever it changes
   React.useEffect(() => {
     localStorage.setItem("adminActiveTab", activeTab);
@@ -62,7 +117,6 @@ export const PortalAdmin = ({ user }) => {
             hospitals: t("hospitalsTab"),
             donations: t("donationsTab"),
             accounts: t("accountsTab"),
-            profiles: t("profilesTab"),
             management: t("managementTab"),
             pending: t("pendingTab")
           };
@@ -73,7 +127,6 @@ export const PortalAdmin = ({ user }) => {
             hospitals: "🏥",
             donations: "🩸",
             accounts: "👥",
-            profiles: "👤",
             management: "⚙️",
             pending: "⏳"
           };
@@ -141,8 +194,6 @@ export const PortalAdmin = ({ user }) => {
       {activeTab === "donations" && <AdminDonationsTab />}
 
       {activeTab === "accounts" && <AdminAccountsTab />}
-
-      {activeTab === "profiles" && <AdminProfileRequestsTab />}
 
       {activeTab === "management" && <AdminManagement user={user} />}
 

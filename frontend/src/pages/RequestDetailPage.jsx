@@ -196,6 +196,10 @@ export const RequestDetailPage =
       nextEligibleDate.getTime() >
       Date.now();
 
+    const isUnverifiedDonor =
+      user?.role === "donor" &&
+      user?.verifiedByAdmin !== true;
+
     const remainingDays =
       isUserInCoolDown
         ? Math.max(
@@ -229,6 +233,15 @@ export const RequestDetailPage =
 
     const handleAssignSelf =
       async () => {
+        if (isUnverifiedDonor) {
+          window.alert(
+            language === "ar"
+              ? "يجب أن يوافق المسؤول على حسابك قبل أن تتمكن من التبرع."
+              : "Your account must be verified by an administrator before you can donate."
+          );
+
+          return;
+        }
         if (
           isUserInCoolDown
         ) {
@@ -598,12 +611,12 @@ export const RequestDetailPage =
 
               <span
                 className={`inline-block rounded-full px-4 py-2 text-sm font-semibold ${request.status ===
-                    "pending"
-                    ? "bg-yellow-100 text-yellow-800"
-                    : request.status ===
-                      "fulfilled"
-                      ? "bg-green-100 text-green-800"
-                      : "bg-red-100 text-red-800"
+                  "pending"
+                  ? "bg-yellow-100 text-yellow-800"
+                  : request.status ===
+                    "fulfilled"
+                    ? "bg-green-100 text-green-800"
+                    : "bg-red-100 text-red-800"
                   }`}
               >
                 {
@@ -706,8 +719,23 @@ export const RequestDetailPage =
             </div>
           )}
 
+          {isUnverifiedDonor && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-center text-sm font-semibold text-amber-800">
+              {language === "ar"
+                ? "حسابك بانتظار موافقة المسؤول. لا يمكنك التبرع حالياً."
+                : "Your account is awaiting administrator verification. Donation is currently disabled."}
+            </div>
+          )}
+          
           <div className="mb-6 flex justify-center gap-4">
             <button
+              title={
+                isUnverifiedDonor
+                  ? language === "ar"
+                    ? "الحساب بانتظار موافقة المسؤول"
+                    : "Account pending administrator verification"
+                  : undefined
+              }
               type="button"
               onClick={() =>
                 setShowUnitsModal(
@@ -716,16 +744,17 @@ export const RequestDetailPage =
               }
               disabled={
                 assigned ||
+                isUnverifiedDonor ||
                 isUserInCoolDown ||
                 unitsRemaining <= 0
               }
               className={`flex items-center justify-center gap-2 rounded-lg px-8 py-3 font-semibold transition ${assigned
-                  ? "cursor-not-allowed bg-green-500 text-white"
-                  : isUserInCoolDown ||
-                    unitsRemaining <=
-                    0
-                    ? "cursor-not-allowed bg-gray-300 text-gray-600"
-                    : "bg-red-500 text-white hover:bg-red-600 active:scale-95"
+                ? "cursor-not-allowed bg-green-500 text-white"
+                : isUnverifiedDonor ||
+                  isUserInCoolDown ||
+                  unitsRemaining <= 0
+                  ? "cursor-not-allowed bg-gray-300 text-gray-600"
+                  : "bg-red-500 text-white hover:bg-red-600 active:scale-95"
                 }`}
             >
               {assigned ? (
@@ -824,6 +853,7 @@ export const RequestDetailPage =
                   }
                   disabled={
                     assigning ||
+                    isUnverifiedDonor ||
                     isUserInCoolDown
                   }
                   className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-500 px-4 py-2 font-semibold text-white hover:bg-red-600 disabled:opacity-50"

@@ -251,10 +251,10 @@ export const AdminRequestsTab = () => {
           value={status || "pending"}
           onChange={(e) => updateRequesterStatus(row._id || row.id, e.target.value)}
           className={`px-3 py-1 border rounded text-sm font-medium ${status === "pending"
-              ? "bg-yellow-50 border-yellow-300 text-yellow-700"
-              : status === "fulfilled"
-                ? "bg-green-50 border-green-300 text-green-700"
-                : "bg-red-50 border-red-300 text-red-700"
+            ? "bg-yellow-50 border-yellow-300 text-yellow-700"
+            : status === "fulfilled"
+              ? "bg-green-50 border-green-300 text-green-700"
+              : "bg-red-50 border-red-300 text-red-700"
             }`}
         >
           <option value="pending">{t("pending")}</option>
@@ -270,6 +270,17 @@ export const AdminRequestsTab = () => {
   const searchableFields = ["fname", "lname", "bloodType", "hospital"];
 
   const actions = [
+    {
+      label: t("assign"),
+      icon: UserPlus,
+      onClick: (request) => {
+        setSelectedRequest(request);
+        setSelectedDonor("");
+        setShowAssignModal(true);
+      },
+      className:
+        "bg-purple-100 text-purple-700 hover:bg-purple-200",
+    },
     {
       label: (request) =>
         matchingRequestId === request._id
@@ -309,7 +320,7 @@ export const AdminRequestsTab = () => {
         actions={actions}
         searchableFields={searchableFields}
       />
-      
+
       {/* Assign Modal */}
       {showAssignModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -342,11 +353,26 @@ export const AdminRequestsTab = () => {
                 <option value="">
                   {t("selectDonorPlaceholder")}
                 </option>
-                {donors.map((donor) => (
-                  <option key={donor.uid} value={donor.uid}>
-                    {donor.fname} {donor.lname} ({donor.bloodType}) - {donor.email}
-                  </option>
-                ))}
+                {donors
+                  .filter(
+                    (donor) =>
+                      donor.verifiedByAdmin &&
+                      donor.status === "eligible" &&
+                      donor.bloodType ===
+                      selectedRequest?.bloodType
+                  )
+                  .map((donor) => (
+                    <option
+                      key={donor.uid}
+                      value={donor.uid}
+                    >
+                      {donor.fname} {donor.lname}
+                      {" "}
+                      ({donor.bloodType}) -
+                      {" "}
+                      {donor.email}
+                    </option>
+                  ))}
               </select>
             </div>
 

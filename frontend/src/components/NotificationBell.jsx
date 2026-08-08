@@ -1,151 +1,157 @@
-import React, {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-import {
-  Bell,
-  CheckCircle,
-  Clock,
-  Droplet,
-  XCircle,
-} from "lucide-react";
-
+import React, { useCallback, useEffect, useRef, useState, } from "react";
+import { Bell, CheckCircle, Clock, Droplet, XCircle, } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useLanguage } from "./LanguageContext.jsx";
 import { useAuth } from "./AuthContext.jsx";
-import {
-  API_BASE_URL,
-  getAccessToken,
-} from "../utils/api.js";
+import { API_BASE_URL, getAccessToken, } from "../utils/api.js";
 
-export const NotificationBell = ({
-  isMobilePanel = false,
-}) => {
+export const NotificationBell = ({ isMobilePanel = false, }) => {
   const { language } = useLanguage();
   const { accessToken } = useAuth();
 
-  const [pendingAccounts, setPendingAccounts] =
-    useState([]);
-
-  const [
-    pendingDonations,
-    setPendingDonations,
-  ] = useState([]);
-
-  const [showDropdown, setShowDropdown] =
-    useState(isMobilePanel);
-
-  const [processingId, setProcessingId] =
-    useState(null);
-
-  const [error, setError] =
-    useState("");
-
+  const [pendingAccounts, setPendingAccounts] = useState([]);
+  const [pendingDonations, setPendingDonations,] = useState([]);
+  const [pendingProfileRequests, setPendingProfileRequests] = useState([]);
+  const [showDropdown, setShowDropdown] = useState(isMobilePanel);
+  const [processingId, setProcessingId] = useState(null);
+  const [error, setError] = useState("");
   const dropdownRef = useRef(null);
+  const pendingCount = pendingAccounts.length + pendingDonations.length + pendingProfileRequests.length;
 
-  const pendingCount =
-    pendingAccounts.length +
-    pendingDonations.length;
+  const navigate = useNavigate();
 
-  const fetchPendingData =
-    useCallback(async () => {
-      const token =
-        getAccessToken() ||
-        accessToken;
+  const fetchPendingData = useCallback(async () => {
+    const token = getAccessToken() || accessToken;
 
-      if (!token) {
-        return;
-      }
+    if (!token) {
+      return;
+    }
+    try {
+      setError("");
 
-      try {
-        setError("");
-
-        const [
-          accountsResponse,
-          donationsResponse,
-        ] = await Promise.all([
-          fetch(
-            `${API_BASE_URL}/auth/admin/accounts`,
-            {
-              method: "GET",
-              headers: {
-                Authorization:
-                  `Bearer ${token}`,
-                Accept:
-                  "application/json",
-              },
+      const [
+        accountsResponse,
+        donationsResponse,
+        profileRequestsResponse
+      ] = await Promise.all([
+        fetch(
+          `${API_BASE_URL}/auth/admin/accounts`,
+          {
+            method: "GET",
+            headers: {
+              Authorization:
+                `Bearer ${token}`,
+              Accept:
+                "application/json"
             }
-          ),
+          }
+        ),
 
-          fetch(
-            `${API_BASE_URL}/donations/admin/pending`,
-            {
-              method: "GET",
-              headers: {
-                Authorization:
-                  `Bearer ${token}`,
-                Accept:
-                  "application/json",
-              },
+        fetch(
+          `${API_BASE_URL}/donations/admin/pending`,
+          {
+            method: "GET",
+            headers: {
+              Authorization:
+                `Bearer ${token}`,
+              Accept:
+                "application/json"
             }
-          ),
-        ]);
+          }
+        ),
 
-        /*
-         * Pending account verification
-         */
-        if (accountsResponse.ok) {
-          const accountsData =
-            await accountsResponse.json();
+        fetch(
+          `${API_BASE_URL}/auth/profile-requests`,
+          {
+            method: "GET",
+            headers: {
+              Authorization:
+                `Bearer ${token}`,
+              Accept:
+                "application/json"
+            }
+          }
+        )
+      ]);
 
-          const unverifiedAccounts =
-            Array.isArray(accountsData)
-              ? accountsData.filter(
-                (account) =>
-                  !account.verifiedByAdmin
-              )
-              : [];
+      /*
+       * Pending account verification
+       */
+      if (accountsResponse.ok) {
+        const accountsData =
+          await accountsResponse.json();
 
-          setPendingAccounts(
-            unverifiedAccounts
-          );
-        }
+        const unverifiedAccounts =
+          Array.isArray(accountsData)
+            ? accountsData.filter(
+              (account) =>
+                !account.verifiedByAdmin
+            )
+            : [];
 
-        /*
-         * Pending donation confirmations
-         */
-        if (donationsResponse.ok) {
-          const donationsData =
-            await donationsResponse.json();
-
-          setPendingDonations(
-            Array.isArray(donationsData)
-              ? donationsData
-              : donationsData.donations ||
-              []
-          );
-        }
-
-        if (
-          !accountsResponse.ok &&
-          !donationsResponse.ok
-        ) {
-          throw new Error(
-            language === "ar"
-              ? "تعذر تحميل الإشعارات."
-              : "Failed to load notifications."
-          );
-        }
-      } catch (fetchError) {
-        console.error(
-          "[NOTIFICATION BELL] Fetch error:",
-          fetchError
+        setPendingAccounts(
+          unverifiedAccounts
         );
-
-        setError(fetchError.message);
       }
-    }, [accessToken, language]);
+
+      /*
+       * Pending donation confirmations
+       */
+      if (donationsResponse.ok) {
+        const donationsData =
+          await donationsResponse.json();
+
+        setPendingDonations(
+          Array.isArray(donationsData)
+            ? donationsData
+            : donationsData.donations ||
+            []
+        );
+      }
+
+      /*
+       * Pending profile update requests
+       */
+      if (
+        profileRequestsResponse.ok
+      ) {
+        const profileData =
+          await profileRequestsResponse.json();
+
+        const pendingProfiles =
+          Array.isArray(profileData)
+            ? profileData.filter(
+              (request) =>
+                request.status ===
+                "pending"
+            )
+            : [];
+
+        setPendingProfileRequests(
+          pendingProfiles
+        );
+      }
+
+      if (
+        !accountsResponse.ok &&
+        !donationsResponse.ok &&
+        !profileRequestsResponse.ok
+      ) {
+        throw new Error(
+          language === "ar"
+            ? "تعذر تحميل الإشعارات."
+            : "Failed to load notifications."
+        );
+      }
+    } catch (fetchError) {
+      console.error(
+        "[NOTIFICATION BELL] Fetch error:",
+        fetchError
+      );
+
+      setError(fetchError.message);
+    }
+  }, [accessToken, language]);
 
   useEffect(() => {
     if (!accessToken) {
@@ -326,10 +332,6 @@ export const NotificationBell = ({
             )
         );
 
-        /*
-         * Refresh both the bell and any other
-         * pending data after approval.
-         */
         window.dispatchEvent(
           new CustomEvent(
             "pending-donations-updated"
@@ -451,6 +453,36 @@ export const NotificationBell = ({
       }
     };
 
+  const openPendingSection = (
+    section
+  ) => {
+    localStorage.setItem(
+      "adminActiveTab",
+      "pending"
+    );
+
+    window.dispatchEvent(
+      new CustomEvent(
+        "adminTabChange",
+        {
+          detail: {
+            tabId: "pending"
+          }
+        }
+      )
+    );
+
+    navigate(
+      `/admin?tab=pending&section=${encodeURIComponent(
+        section
+      )}`
+    );
+
+    if (!isMobilePanel) {
+      setShowDropdown(false);
+    }
+  };
+
   return (
     <div
       ref={dropdownRef}
@@ -512,6 +544,43 @@ export const NotificationBell = ({
           )}
 
           <div className="divide-y divide-slate-200">
+            {/* Pending profile update/deletion requests */}
+            {pendingProfileRequests.length > 0 && (
+              <button
+                type="button"
+                onClick={() =>
+                  openPendingSection(
+                    "profile-requests"
+                  )
+                }
+                className="w-full p-4 text-left hover:bg-slate-50"
+              >
+                <div className="flex items-start gap-3">
+                  <Clock className="mt-0.5 h-5 w-5 flex-shrink-0 text-purple-600" />
+
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-slate-900">
+                      {language === "ar"
+                        ? "طلبات الملف الشخصي بانتظار الإجراء"
+                        : "Profile requests awaiting action"}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      {language === "ar"
+                        ? `${pendingProfileRequests.length} طلب معلق`
+                        : `${pendingProfileRequests.length} pending request(s)`}
+                    </p>
+
+                    <p className="mt-2 text-xs font-semibold text-purple-700">
+                      {language === "ar"
+                        ? "اضغط للمراجعة"
+                        : "Click to review"}
+                    </p>
+                  </div>
+                </div>
+              </button>
+            )}
+
             {/* Pending donation confirmations */}
             {pendingDonations.map(
               (donation) => {
@@ -532,7 +601,24 @@ export const NotificationBell = ({
                       donation._id ||
                       donation.donationId
                     }
-                    className="p-4 hover:bg-slate-50"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() =>
+                      openPendingSection(
+                        "donation-confirmations"
+                      )
+                    }
+                    onKeyDown={(event) => {
+                      if (
+                        event.key === "Enter" ||
+                        event.key === " "
+                      ) {
+                        openPendingSection(
+                          "donation-confirmations"
+                        );
+                      }
+                    }}
+                    className="cursor-pointer p-4 hover:bg-slate-50"
                   >
                     <div className="flex items-start gap-3">
                       <Droplet className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600" />
@@ -573,11 +659,13 @@ export const NotificationBell = ({
                         <div className="mt-3 flex gap-2">
                           <button
                             type="button"
-                            onClick={() =>
+                            onClick={(event) => {
+                              event.stopPropagation();
+
                               handleApproveDonation(
                                 donation.donationId
-                              )
-                            }
+                              );
+                            }}
                             disabled={
                               isProcessing
                             }
@@ -592,11 +680,13 @@ export const NotificationBell = ({
 
                           <button
                             type="button"
-                            onClick={() =>
+                            onClick={(event) => {
+                              event.stopPropagation();
+
                               handleRejectDonation(
                                 donation.donationId
-                              )
-                            }
+                              );
+                            }}
                             disabled={
                               isProcessing
                             }
@@ -621,7 +711,24 @@ export const NotificationBell = ({
               (account) => (
                 <div
                   key={account.uid}
-                  className="p-4 hover:bg-slate-50"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() =>
+                    openPendingSection(
+                      "profile-verifications"
+                    )
+                  }
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === "Enter" ||
+                      event.key === " "
+                    ) {
+                      openPendingSection(
+                        "profile-verifications"
+                      );
+                    }
+                  }}
+                  className="cursor-pointer p-4 hover:bg-slate-50"
                 >
                   <div className="flex items-start gap-3">
                     <Clock className="mt-0.5 h-5 w-5 flex-shrink-0 text-yellow-600" />
@@ -643,11 +750,13 @@ export const NotificationBell = ({
 
                       <button
                         type="button"
-                        onClick={() =>
+                        onClick={(event) => {
+                          event.stopPropagation();
+
                           handleVerifyAccount(
                             account.uid
-                          )
-                        }
+                          );
+                        }}
                         disabled={
                           processingId ===
                           account.uid

@@ -6,44 +6,89 @@ const TEST_MODE = false;
 const AuthContext =
   createContext(undefined);
 
-/*
- * IMPORTANT:
- * These production durations MUST match
- * your backend JWT configuration.
- *
- * Change these two values if your backend
- * uses different token lifetimes.
- */
 const ACCESS_TOKEN_DURATION =
   TEST_MODE
     ? 1 * 60 * 1000
-    : 60 * 60 * 1000;
+    : 15 * 60 * 1000;
 
 const REFRESH_TOKEN_DURATION =
   TEST_MODE
     ? 3 * 60 * 1000
-    : 20 * 24 * 60 * 60 * 1000;
+    : 7 * 24 * 60 * 60 * 1000;
 
-const storeTokenTimestamps = (storage) => {
-  const now = Date.now()
-  storage.setItem("tokenCreationTime", now.toString());
-  storage.setItem("tokenExpirationTime", (now + ACCESS_TOKEN_DURATION).toString());
-  storage.setItem("refreshTokenCreationTime", now.toString());
-  storage.setItem("refreshTokenExpirationTime", (now + REFRESH_TOKEN_DURATION).toString());
+const getJwtExpirationTime = (
+  token,
+  fallbackDuration
+) => {
+  try {
+    const encodedPayload = token
+      .split('.')[1]
+      .replace(/-/g, '+')
+      .replace(/_/g, '/');
 
-  if (TEST_MODE) {
-    console.log(
-      "[TEST MODE] Access token:",
-      ACCESS_TOKEN_DURATION / 1000,
-      "seconds"
+    const paddedPayload =
+      encodedPayload.padEnd(
+        Math.ceil(
+          encodedPayload.length / 4
+        ) * 4,
+        '='
+      );
+
+    const payload = JSON.parse(
+      decodeURIComponent(
+        atob(paddedPayload)
+          .split('')
+          .map(
+            (character) =>
+              `%${character
+                .charCodeAt(0)
+                .toString(16)
+                .padStart(2, '0')}`
+          )
+          .join('')
+      )
     );
 
-    console.log(
-      "[TEST MODE] Refresh token:",
-      REFRESH_TOKEN_DURATION / 1000,
-      "seconds"
+    return Number(payload.exp) * 1000;
+  } catch {
+    return (
+      Date.now() + fallbackDuration
     );
   }
+};
+
+const storeTokenTimestamps = (
+  storage,
+  accessTokenValue,
+  refreshTokenValue
+) => {
+  const now = Date.now();
+
+  storage.setItem(
+    'tokenCreationTime',
+    now.toString()
+  );
+
+  storage.setItem(
+    'tokenExpirationTime',
+    getJwtExpirationTime(
+      accessTokenValue,
+      ACCESS_TOKEN_DURATION
+    ).toString()
+  );
+
+  storage.setItem(
+    'refreshTokenCreationTime',
+    now.toString()
+  );
+
+  storage.setItem(
+    'refreshTokenExpirationTime',
+    getJwtExpirationTime(
+      refreshTokenValue,
+      REFRESH_TOKEN_DURATION
+    ).toString()
+  );
 };
 
 const clearStorage = (storage) => {
@@ -58,21 +103,67 @@ const clearStorage = (storage) => {
 
 export const AuthProvider = ({ children, }) => {
   const [user, setUser] = useState(null);
-
   const [accessToken, setAccessToken,] = useState(null);
-
   const [refreshToken, setRefreshToken,] = useState(null);
-
   const [isLoading, setIsLoading,] = useState(true);
-
   const [error, setError] = useState(null);
 
-  /*
-   * Logout must be declared before
-   * refreshTokens because refreshTokens
-   * depends on it.
-   */
+  useEffect(() => {
+    const handleTokensRefreshed = (event) => {
+      const {
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken
+      } = event.detail || {};
+
+      if (
+        !newAccessToken ||
+        !newRefreshToken
+      ) {
+        return;
+      }
+
+      const storage =
+        localStorage.getItem(
+          'refreshToken'
+        )
+          ? localStorage
+          : sessionStorage;
+
+      setAccessToken(newAccessToken);
+      setRefreshToken(newRefreshToken);
+
+      storeTokenTimestamps(
+        storage,
+        newAccessToken,
+        newRefreshToken
+      );
+    };
+
+    window.addEventListener(
+      'auth:tokens-refreshed',
+      handleTokensRefreshed
+    );
+
+    return () =>
+      window.removeEventListener(
+        'auth:tokens-refreshed',
+        handleTokensRefreshed
+      );
+  }, []);
+
   const logout = useCallback(() => {
+
+    if (getAccessToken()) {
+      authAPI
+        .logoutUser()
+        .catch((logoutError) => {
+          console.warn(
+            '[AUTH] Server logout failed:',
+            logoutError
+          );
+        });
+    }
+
     console.log("[AUTH] User logged out");
 
     setUser(null);
@@ -89,16 +180,6 @@ export const AuthProvider = ({ children, }) => {
     );
   }, []);
 
-  /*
-   * Get latest user directly from DB.
-   *
-   * This is what updates:
-   * - donor status
-   * - donationCount
-   * - lastDonationDate
-   * - nextEligibleDate
-   * - verification status
-   */
   const refreshUserProfile =
     useCallback(async () => {
       try {
@@ -209,10 +290,7 @@ export const AuthProvider = ({ children, }) => {
       }
     }, []);
 
-  /*
-   * Restore an existing login when
-   * the page/browser reloads.
-   */
+
   useEffect(() => {
     const initializeAuth =
       async () => {
@@ -235,10 +313,6 @@ export const AuthProvider = ({ children, }) => {
               "user"
             );
 
-          /*
-           * If no session login exists,
-           * try persistent login.
-           */
           if (!savedAccessToken) {
             storage =
               localStorage;
@@ -281,10 +355,6 @@ export const AuthProvider = ({ children, }) => {
                 parsedUser
               );
 
-              /*
-               * Replace possibly stale browser
-               * profile with current DB profile.
-               */
               const profileResult =
                 await refreshUserProfile();
 
@@ -452,7 +522,9 @@ export const AuthProvider = ({ children, }) => {
       );
 
       storeTokenTimestamps(
-        storage
+        storage,
+        result.data.accessToken,
+        result.data.refreshToken
       );
 
       setAccessToken(
@@ -599,7 +671,9 @@ export const AuthProvider = ({ children, }) => {
       );
 
       storeTokenTimestamps(
-        storage
+        storage,
+        result.data.accessToken,
+        result.data.refreshToken
       );
 
       setAccessToken(
@@ -749,7 +823,9 @@ export const AuthProvider = ({ children, }) => {
          * therefore both timestamps restart.
          */
         storeTokenTimestamps(
-          storage
+          storage,
+          newAccessToken,
+          newRefreshToken
         );
 
         console.log(

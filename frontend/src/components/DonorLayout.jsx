@@ -20,17 +20,45 @@ export default function DonorLayout({ children }) {
 
   // Update active tab based on current route
   useEffect(() => {
-    const currentTab = tabs.find(tab => tab.route === location.pathname);
+    const requestedTab =
+      new URLSearchParams(
+        location.search
+      ).get("tab");
+
+    const currentTab =
+      tabs.find(
+        (tab) =>
+          tab.id === requestedTab
+      ) ||
+      tabs.find(
+        (tab) =>
+          tab.route ===
+          location.pathname
+      );
+
     if (currentTab) {
-      setActiveTab(currentTab.id);
-      localStorage.setItem("donorActiveTab", currentTab.id);
+      setActiveTab(
+        currentTab.id
+      );
+
+      localStorage.setItem(
+        "donorActiveTab",
+        currentTab.id
+      );
     }
-  }, [location.pathname]);
+  }, [
+    location.pathname,
+    location.search
+  ]);
 
   const handleTabClick = (tab) => {
     setActiveTab(tab.id);
     localStorage.setItem("donorActiveTab", tab.id);
-    navigate(tab.route);
+    navigate(
+      `${tab.route}?tab=${encodeURIComponent(
+        tab.id
+      )}`
+    );
     // Emit custom event for components to listen to
     window.dispatchEvent(new CustomEvent("donorTabChange", { detail: { tabId: tab.id } }));
     // Close mobile menu
@@ -44,11 +72,10 @@ export default function DonorLayout({ children }) {
         <button
           key={tab.id}
           onClick={() => handleTabClick(tab)}
-          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-semibold transition text-left ${
-            activeTab === tab.id
-              ? "bg-red-100 text-red-700 border-l-4 border-red-600"
-              : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-          }`}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-semibold transition text-left ${activeTab === tab.id
+            ? "bg-red-100 text-red-700 border-l-4 border-red-600"
+            : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+            }`}
         >
           <span>{tab.icon}</span>
           {tab.label}
@@ -66,11 +93,10 @@ export default function DonorLayout({ children }) {
             <button
               key={tab.id}
               onClick={() => handleTabClick(tab)}
-              className={`px-4 py-2 font-semibold text-sm transition whitespace-nowrap flex items-center gap-2 ${
-                activeTab === tab.id
-                  ? "text-red-600 border-b-2 border-red-600 -mb-2"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
+              className={`px-4 py-2 font-semibold text-sm transition whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id
+                ? "text-red-600 border-b-2 border-red-600 -mb-2"
+                : "text-slate-600 hover:text-slate-900"
+                }`}
             >
               <span>{tab.icon}</span>
               {tab.label}

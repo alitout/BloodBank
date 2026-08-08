@@ -3,14 +3,6 @@ import { useAuth } from "../components/AuthContext.jsx";
 
 const TEST_MODE = false;
 
-const ACCESS_TOKEN_DURATION = TEST_MODE
-  ? 1 * 60 * 1000
-  : 60 * 60 * 1000;
-
-const REFRESH_TOKEN_DURATION = TEST_MODE
-  ? 3 * 60 * 1000
-  : 20 * 24 * 60 * 60 * 1000;
-
 const AUTO_REFRESH_BEFORE_EXPIRY = TEST_MODE
   ? 10 * 1000
   : 10 * 60 * 1000;

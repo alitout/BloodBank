@@ -182,9 +182,16 @@ export const DBProvider = ({ children }) => {
       const result = await requesterAPI.create(payload);
 
       if (result.success && result.data) {
-        //console.log('✅ [DB] Blood request created:', result.data.id);
-        setRequesters((prev) => [result.data, ...prev]);
-        return result.data;
+        const requester =
+          result.data.requester ||
+          result.data;
+
+        setRequesters((previous) => [
+          requester,
+          ...previous
+        ]);
+
+        return requester;
       } else {
         throw new Error(result.error || 'Failed to create request');
       }
@@ -205,9 +212,20 @@ export const DBProvider = ({ children }) => {
       const result = await requesterAPI.update(id, { status });
 
       if (result.success && result.data) {
-        //console.log('✅ [DB] Request updated:', id);
-        setRequesters((prev) => prev.map(r => r.id === id ? result.data : r));
-        return result.data;
+        const requester =
+          result.data.requester ||
+          result.data;
+
+        setRequesters((previous) =>
+          previous.map((item) =>
+            item._id === id ||
+              item.id === id
+              ? requester
+              : item
+          )
+        );
+
+        return requester;
       } else {
         throw new Error(result.error || 'Failed to update request');
       }
@@ -228,9 +246,13 @@ export const DBProvider = ({ children }) => {
       const result = await requesterAPI.delete(id);
 
       if (result.success) {
-        //console.log('✅ [DB] Request deleted:', id);
-        setRequesters((prev) => prev.filter(r => r.id !== id));
-        return true;
+        setRequesters((previous) =>
+          previous.filter(
+            (item) =>
+              item._id !== id &&
+              item.id !== id
+          )
+        );
       } else {
         throw new Error(result.error || 'Failed to delete request');
       }
@@ -252,9 +274,16 @@ export const DBProvider = ({ children }) => {
       const result = await appointmentAPI.create(payload);
 
       if (result.success && result.data) {
-        //console.log('✅ [DB] Appointment scheduled:', result.data.id);
-        setAppointments((prev) => [...prev, result.data]);
-        return result.data;
+        const appointment =
+          result.data.appointment ||
+          result.data;
+
+        setAppointments((previous) => [
+          ...previous,
+          appointment
+        ]);
+
+        return appointment;
       } else {
         throw new Error(result.error || 'Failed to schedule appointment');
       }
@@ -267,18 +296,25 @@ export const DBProvider = ({ children }) => {
   };
 
   // Add hospital
-  const addHospital = async (name, location, contact, latitude, longitude, address) => {
+  const addHospital = async (name, location, phoneNumber, address) => {
     try {
       setError(null);
       //console.log('\n🚀 [DB] Creating hospital...');
 
-      const payload = { name, location, contact, latitude, longitude, address };
+      const payload = { name, location, phoneNumber, address };
       const result = await hospitalAPI.create(payload);
 
       if (result.success && result.data) {
-        //console.log('✅ [DB] Hospital created:', result.data.id);
-        setHospitals((prev) => [...prev, result.data]);
-        return result.data;
+        const hospital =
+          result.data.hospital ||
+          result.data;
+
+        setHospitals((previous) => [
+          ...previous,
+          hospital
+        ]);
+
+        return hospital;
       } else {
         throw new Error(result.error || 'Failed to create hospital');
       }

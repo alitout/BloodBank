@@ -1,5 +1,12 @@
 const path = require('path');
-const HtmlWebpackPlugin = require('html-webpack-plugin');
+const webpack = require('webpack');
+const HtmlWebpackPlugin =
+  require('html-webpack-plugin');
+
+const apiBaseUrl =
+  process.env.API_BASE_URL ||
+  process.env.VITE_API_BASE_URL ||
+  '/api';
 
 module.exports = {
   mode: process.env.NODE_ENV || 'development',
@@ -63,6 +70,11 @@ module.exports = {
     }
   },
   plugins: [
+    new webpack.DefinePlugin({
+      __API_BASE_URL__:
+        JSON.stringify(apiBaseUrl)
+    }),
+
     new HtmlWebpackPlugin({
       template: './index.html',
       filename: 'index.html',
