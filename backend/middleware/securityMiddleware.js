@@ -88,12 +88,12 @@ export const corsMiddleware = cors(corsOptions);
  */
 export const sanitizeInput = (input) => {
   if (typeof input !== 'string') return input;
-  
+
   // Remove HTML tags and entities
   let sanitized = input.trim();
   sanitized = validator.escape(sanitized); // Escape HTML special chars
   sanitized = validator.trim(sanitized);
-  
+
   return sanitized;
 };
 
@@ -102,13 +102,13 @@ export const sanitizeInput = (input) => {
  */
 export const sanitizeEmail = (email) => {
   if (!email || typeof email !== 'string') return null;
-  
+
   const trimmed = email.trim().toLowerCase();
-  
+
   if (!validator.isEmail(trimmed)) {
     throw new Error('Invalid email format');
   }
-  
+
   return trimmed;
 };
 
@@ -117,13 +117,13 @@ export const sanitizeEmail = (email) => {
  */
 export const sanitizePhone = (phone) => {
   if (!phone || typeof phone !== 'string') return null;
-  
+
   const sanitized = phone.trim().replace(/\D/g, ''); // Remove non-digits
-  
+
   if (!validator.isMobilePhone(sanitized, 'any')) {
     throw new Error('Invalid phone number format');
   }
-  
+
   return sanitized;
 };
 
@@ -133,7 +133,7 @@ export const sanitizePhone = (phone) => {
  */
 export const validatePasswordStrength = (password) => {
   const errors = [];
-  
+
   if (!password || password.length < 12) {
     errors.push('Password must be at least 12 characters');
   }
@@ -149,11 +149,11 @@ export const validatePasswordStrength = (password) => {
   if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
     errors.push('Password must contain special character');
   }
-  
+
   if (errors.length > 0) {
     throw new Error(errors.join('. '));
   }
-  
+
   return true;
 };
 
@@ -162,11 +162,11 @@ export const validatePasswordStrength = (password) => {
  */
 export const sanitizeBloodType = (bloodType) => {
   const validTypes = ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'];
-  
+
   if (!bloodType || !validTypes.includes(bloodType.toUpperCase())) {
     throw new Error('Invalid blood type');
   }
-  
+
   return bloodType.toUpperCase();
 };
 
@@ -174,19 +174,32 @@ export const sanitizeBloodType = (bloodType) => {
  * Sanitize and validate name
  */
 export const sanitizeName = (name) => {
-  if (!name || typeof name !== 'string') return null;
-  
-  const sanitized = sanitizeInput(name);
-  
-  if (sanitized.length < 2 || sanitized.length > 50) {
-    throw new Error('Name must be between 2 and 50 characters');
+  if (!name || typeof name !== 'string') {
+    return null;
   }
-  
-  // Allow letters, spaces, hyphens, apostrophes
-  if (!/^[a-zA-Z\s\-']+$/.test(sanitized)) {
-    throw new Error('Name contains invalid characters');
+
+  const sanitized = validator
+    .unescape(name)
+    .trim()
+    .normalize('NFKC');
+
+  if (
+    sanitized.length < 2 ||
+    sanitized.length > 50
+  ) {
+    throw new Error(
+      'Name must be between 2 and 50 characters'
+    );
   }
-  
+
+  // Arabic, Latin, French accents,
+  // spaces, apostrophes, and hyphens.
+  if (!/^[\p{L}\p{M}\s'-]+$/u.test(sanitized)) {
+    throw new Error(
+      'Name contains invalid characters'
+    );
+  }
+
   return sanitized;
 };
 
@@ -197,7 +210,7 @@ export const sanitizeName = (name) => {
 export const sanitizeDataMiddleware = (req, res, next) => {
   // Fields that should NOT be sanitized (passwords, tokens, etc)
   const excludeFields = ['password', 'passwordConfirmation', 'refreshToken', 'accessToken'];
-  
+
   // Sanitize body
   if (req.body && typeof req.body === 'object') {
     Object.keys(req.body).forEach((key) => {
@@ -232,13 +245,13 @@ export const genericErrorHandler = (err, req, res, next) => {
     method: req.method,
     timestamp: new Date().toISOString()
   });
-  
+
   // Don't leak sensitive information to client
   const statusCode = err.statusCode || 500;
-  const message = statusCode === 500 
-    ? 'An error occurred. Please try again later.' 
+  const message = statusCode === 500
+    ? 'An error occurred. Please try again later.'
     : err.message;
-  
+
   res.status(statusCode).json({
     error: message,
     ...(process.env.NODE_ENV === 'development' && { debug: err.message })

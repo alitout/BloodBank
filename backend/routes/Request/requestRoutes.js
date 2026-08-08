@@ -10,6 +10,7 @@ router.post('/', verifyAccessToken, RequestController.createRequester);
 
 // Donor-specific routes for notifications and available requests
 router.get('/available-requests', verifyAccessToken, RequestController.getAvailableRequests);
+router.get('/my-requests', verifyAccessToken, RequestController.getMyRequests);
 router.get('/assigned-requests', verifyAccessToken, RequestController.getAssignedRequests);
 router.get('/donation-history', verifyAccessToken, RequestController.getDonationHistory);
 router.get('/all-donations', verifyAdminToken, RequestController.getAllDonations);

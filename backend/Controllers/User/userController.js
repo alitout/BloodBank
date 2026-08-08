@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { env } from '../../config/env.js';
-import { sanitizeEmail, sanitizePhone, sanitizeName, sanitizeBloodType, validatePasswordStrength } from '../../middleware/securityMiddleware.js';
+import { sanitizeEmail, sanitizePhone, sanitizeName, sanitizeInput, sanitizeBloodType, validatePasswordStrength } from '../../middleware/securityMiddleware.js';
 
 const generateAccessToken = (user) => {
   return jwt.sign(
@@ -69,7 +69,7 @@ const getAllAccounts = async (req, res) => {
   try {
     // User must be verified via middleware (verifyAdminToken)
     const accounts = await User.find({})
-      .select('-password -refreshToken')
+      .select('-password -refreshTokenHash')
       .limit(1000); // Prevent massive data leaks
 
     res.json(accounts);
@@ -192,7 +192,7 @@ const loginUser = async (req, res) => {
       try {
         const sanitizedEmail = sanitizeEmail(email);
         console.log('🔍 [AUTH] Searching for user by email');
-        user = await User.findOne({ email: sanitizedEmail });
+        user = await User.findOne({ email: sanitizedEmail }).select('+password +refreshTokenHash');
       } catch (err) {
         // Invalid email format - generic response
         console.warn('⚠️ [AUTH] Invalid email format:', err.message);
@@ -202,7 +202,7 @@ const loginUser = async (req, res) => {
       try {
         const sanitizedPhone = sanitizePhone(phone);
         console.log('🔍 [AUTH] Searching for user by phone');
-        user = await User.findOne({ phone: sanitizedPhone });
+        user = await User.findOne({ phone: sanitizedPhone }).select('+password +refreshTokenHash');
       } catch (err) {
         // Invalid phone format - generic response
         console.warn('⚠️ [AUTH] Invalid phone format:', err.message);
@@ -318,7 +318,7 @@ const refreshAccessToken = async (req, res) => {
 
     const user = await User.findOne({
       uid: decoded.uid,
-    });
+    }).select('+refreshTokenHash');
 
     if (!user) {
       return res.status(401).json({
@@ -475,7 +475,7 @@ const verifyDonor = async (req, res) => {
         verifiedBy: req.user.uid
       },
       { new: true }
-    ).select('-password -refreshToken');
+    ).select('-password -refreshTokenHash');
 
     if (!user) {
       return res.status(404).json({ error: 'Donor not found' });
@@ -523,7 +523,7 @@ const updateUserByAdmin = async (req, res) => {
       { uid },
       updateData,
       { new: true }
-    ).select('-password -refreshToken');
+    ).select('-password -refreshTokenHash');
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -675,7 +675,7 @@ const createHospitalByAdmin = async (req, res) => {
       sanitizedPhone = sanitizePhone(phone);
       sanitizedHospitalName = sanitizeName(hospitalName);
       sanitizedContactName = sanitizeName(hospitalContactName);
-      sanitizedAddress = sanitizeName(hospitalAddress); // Basic sanitization
+      sanitizedAddress = sanitizeInput(hospitalAddress);
     } catch (err) {
       return res.status(400).json({ error: err.message });
     }
@@ -700,7 +700,7 @@ const createHospitalByAdmin = async (req, res) => {
       role: 'hospital',
       hospitalName: sanitizedHospitalName,
       hospitalContactName: sanitizedContactName,
-      hospitalContactTitle: hospitalContactTitle, // Already sanitized by middleware
+      hospitalContactTitle: sanitizeInput(hospitalContactTitle),
       hospitalAddress: sanitizedAddress,
       verifiedByAdmin: true,
       createdBy: req.user.uid,
@@ -737,7 +737,7 @@ const getPendingUsers = async (req, res) => {
     // ✅ USER MUST BE AUTHENTICATED AS ADMIN
 
     const pending = await User.find({ verifiedByAdmin: false })
-      .select('-password -refreshToken')
+      .select('-password -refreshTokenHash')
       .limit(1000);
 
     res.json(pending);
@@ -754,7 +754,7 @@ const logoutUser = async (req, res) => {
 
     const user = await User.findOne({
       uid: uid
-    });
+    }).select('+refreshTokenHash');
 
     if (user) {
       user.refreshTokenHash = null;

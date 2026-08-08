@@ -16,26 +16,38 @@ const getAllHospitals = async (req, res) => {
 // Create hospital
 const createHospital = async (req, res) => {
   try {
-    const { name, location, contact, latitude, longitude, address } = req.body;
-    //console.log('[HOSPITAL] Creating hospital:', { name, location });
+    const {
+      name,
+      location,
+      contact,
+      phoneNumber,
+      address
+    } = req.body;
 
     const newHospital = new Hospital({
       id: `hosp-${Date.now()}`,
       name,
       location,
-      contact,
-      latitude,
-      longitude,
+      phoneNumber: phoneNumber || contact,
       address,
       verified: true
     });
 
     await newHospital.save();
-    //console.log('[HOSPITAL] Hospital created:', newHospital.id);
-    res.status(201).json({ message: 'Hospital created', hospital: newHospital });
+
+    res.status(201).json({
+      message: 'Hospital created',
+      hospital: newHospital
+    });
   } catch (error) {
-    console.error('[HOSPITAL] Error creating hospital:', error.message);
-    res.status(500).json({ error: error.message });
+    console.error(
+      '[HOSPITAL] Error creating hospital:',
+      error.message
+    );
+
+    res.status(500).json({
+      error: error.message
+    });
   }
 };
 
@@ -43,24 +55,58 @@ const createHospital = async (req, res) => {
 const updateHospital = async (req, res) => {
   try {
     const { id } = req.params;
-    //console.log('[HOSPITAL] Updating hospital:', id);
 
-    const updatedHospital = await Hospital.findByIdAndUpdate(
-      id,
-      { ...req.body, updatedAt: new Date() },
-      { new: true }
+    const allowedUpdates = [
+      'name',
+      'location',
+      'phoneNumber',
+      'address',
+      'verified'
+    ];
+
+    const updateData = Object.fromEntries(
+      Object.entries(req.body).filter(([key]) =>
+        allowedUpdates.includes(key)
+      )
     );
 
-    if (!updatedHospital) {
-      //console.log('[HOSPITAL] Update failed: Hospital not found');
-      return res.status(404).json({ error: 'Hospital not found' });
+    // Temporary backward compatibility
+    if (req.body.contact && !updateData.phoneNumber) {
+      updateData.phoneNumber = req.body.contact;
     }
 
-    //console.log('[HOSPITAL] Hospital updated:', id);
-    res.json({ message: 'Hospital updated', hospital: updatedHospital });
+    const updatedHospital =
+      await Hospital.findByIdAndUpdate(
+        id,
+        {
+          ...updateData,
+          updatedAt: new Date()
+        },
+        {
+          new: true,
+          runValidators: true
+        }
+      );
+
+    if (!updatedHospital) {
+      return res.status(404).json({
+        error: 'Hospital not found'
+      });
+    }
+
+    res.json({
+      message: 'Hospital updated',
+      hospital: updatedHospital
+    });
   } catch (error) {
-    console.error('[HOSPITAL] Error updating hospital:', error.message);
-    res.status(500).json({ error: error.message });
+    console.error(
+      '[HOSPITAL] Error updating hospital:',
+      error.message
+    );
+
+    res.status(500).json({
+      error: error.message
+    });
   }
 };
 

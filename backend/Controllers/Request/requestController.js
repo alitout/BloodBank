@@ -19,11 +19,16 @@ const getAllRequesters = async (req, res) => {
 // Create blood request
 const createRequester = async (req, res) => {
   try {
-    const { fname, fatherName, lname, bloodGenre, bloodType, hospital, unitsNeeded, date, description, relationToPatient } = req.body;
-    //console.log('[REQUESTER] Creating blood request:', { fname, lname, bloodType, hospital, unitsNeeded });
+    const userUid =
+      req.user?.uid;
 
-    const newRequest = new Requester({
-      id: `req-${Date.now()}`,
+    if (!userUid) {
+      return res.status(401).json({
+        error: "Authentication required",
+      });
+    }
+
+    const {
       fname,
       fatherName,
       lname,
@@ -34,57 +39,144 @@ const createRequester = async (req, res) => {
       date,
       description,
       relationToPatient,
-      status: 'pending'
-    });
+    } = req.body;
 
-    await newRequest.save();
-    //console.log('[REQUESTER] Blood request created:', newRequest.id);
+    const newRequest =
+      await Requester.create({
+        id: `req-${Date.now()}`,
 
-    // Automatically find and notify matching donors
-    try {
-      await findAndNotifyMatchingDonors(newRequest);
-    } catch (notificationError) {
-      console.error('[REQUESTER] Error sending notifications:', notificationError.message);
-      // Don't fail the request creation if notifications fail
+        createdByUid:
+          userUid,
+
+        fname,
+        fatherName,
+        lname,
+        bloodGenre,
+        bloodType,
+        hospital,
+        unitsNeeded,
+        date,
+        description,
+        relationToPatient,
+
+        status:
+          "pending",
+
+        approvalStatus:
+          "pending",
+      });
+
+    // Notify admins — NOT donors.
+    const admins =
+      await User.find({
+        role: "super_admin",
+      }).select("uid");
+
+    if (admins.length) {
+      await Notification.insertMany(
+        admins.map((admin) => ({
+          recipientUid:
+            admin.uid,
+
+          type:
+            "request_submitted",
+
+          requestId:
+            newRequest._id,
+
+          title:
+            "Blood Request Requires Approval",
+
+          message:
+            `${req.user.email || userUid} submitted a new blood request.`,
+
+          read: false,
+        }))
+      );
     }
 
-    res.status(201).json({ message: 'Blood request created', requester: newRequest });
+    return res.status(201).json({
+      message:
+        "Blood request submitted for admin approval",
+
+      requester:
+        newRequest,
+    });
+
   } catch (error) {
-    console.error('[REQUESTER] Error creating request:', error.message);
-    res.status(500).json({ error: error.message });
+    console.error(
+      "[REQUEST] Create:",
+      error
+    );
+
+    return res.status(500).json({
+      error:
+        "Failed to submit blood request",
+    });
   }
 };
 
-// Find matching donors and send notifications
-const findAndNotifyMatchingDonors = async (request) => {
+const getMyRequests = async (
+  req,
+  res
+) => {
   try {
-    // Find all donors with matching blood type and eligible status
-    const matchingDonors = await User.find({
-      role: 'donor',
-      bloodType: request.bloodType,
-      status: 'eligible'
+    const page =
+      Math.max(
+        Number(req.query.page) || 1,
+        1
+      );
+
+    const limit =
+      Math.min(
+        Math.max(
+          Number(req.query.limit) || 20,
+          1
+        ),
+        100
+      );
+
+    const query = {
+      createdByUid:
+        req.user.uid,
+    };
+
+    const [
+      requests,
+      total,
+    ] =
+      await Promise.all([
+        Requester.find(query)
+          .sort({
+            createdAt: -1,
+          })
+          .skip(
+            (page - 1) *
+            limit
+          )
+          .limit(limit)
+          .lean(),
+
+        Requester.countDocuments(
+          query
+        ),
+      ]);
+
+    res.json({
+      requests,
+      total,
+      page,
+      pages:
+        Math.ceil(
+          total / limit
+        ),
     });
 
-    console.log(`[NOTIFICATION] Found ${matchingDonors.length} eligible donors for blood type ${request.bloodType}`);
-
-    // Create notifications for each matching donor
-    const notifications = matchingDonors.map((donor) => ({
-      donorId: donor.uid,
-      requestId: request._id,
-      type: 'request_available',
-      title: `New Blood Request Available`,
-      message: `A new ${request.bloodType} blood request is available at ${request.hospital}. Units needed: ${request.unitsNeeded}. Click to view and assign yourself if interested.`,
-      read: false,
-      actionTaken: false
-    }));
-
-    if (notifications.length > 0) {
-      await Notification.insertMany(notifications);
-      console.log(`[NOTIFICATION] Created ${notifications.length} notifications for request ${request._id}`);
-    }
   } catch (error) {
-    console.error('[NOTIFICATION] Error in findAndNotifyMatchingDonors:', error.message);
-    throw error;
+    res.status(500).json({
+      error:
+        "Failed to fetch your requests",
+    });
   }
 };
 
@@ -138,35 +230,153 @@ const assignRequestToDonor = async (req, res) => {
   try {
     const { id } = req.params;
     const { donorId } = req.body;
-    const adminId = req.user?.uid; // From auth middleware
+    const adminId = req.user?.uid;
 
-    if (!donorId) {
-      return res.status(400).json({ error: 'Donor ID is required' });
-    }
-
-    console.log('[REQUESTER] Assigning blood request:', id, 'to donor:', donorId);
-
-    const updatedRequest = await Requester.findByIdAndUpdate(
-      id,
-      {
-        assignedTo: donorId,
-        assignedAt: new Date(),
-        assignedByAdmin: adminId,
-        updatedAt: new Date()
-      },
-      { new: true }
+    const unitsToAssign = Number(
+      req.body.unitsAssigned ?? 1
     );
 
-    if (!updatedRequest) {
-      console.log('[REQUESTER] Assignment failed: Request not found');
-      return res.status(404).json({ error: 'Blood request not found' });
+    if (!donorId) {
+      return res.status(400).json({
+        error: 'Donor ID is required'
+      });
     }
 
-    console.log('[REQUESTER] Blood request assigned successfully:', id);
-    res.json({ message: 'Blood request assigned to donor', requester: updatedRequest });
+    if (
+      !Number.isInteger(unitsToAssign) ||
+      unitsToAssign < 1
+    ) {
+      return res.status(400).json({
+        error:
+          'Units assigned must be a positive integer'
+      });
+    }
+
+    const [request, donor] = await Promise.all([
+      Requester.findById(id),
+      User.findOne({
+        uid: donorId,
+        role: 'donor'
+      })
+    ]);
+
+    if (!request) {
+      return res.status(404).json({
+        error: 'Blood request not found'
+      });
+    }
+
+    if (!donor) {
+      return res.status(404).json({
+        error: 'Donor not found'
+      });
+    }
+
+    if (
+      !donor.verifiedByAdmin ||
+      donor.status !== 'eligible'
+    ) {
+      return res.status(400).json({
+        error: 'Donor is not currently eligible'
+      });
+    }
+
+    if (request.status !== 'pending') {
+      return res.status(400).json({
+        error: 'Blood request is not active'
+      });
+    }
+
+    if (donor.bloodType !== request.bloodType) {
+      return res.status(400).json({
+        error:
+          'Donor blood type does not match the request'
+      });
+    }
+
+    const alreadyAssigned =
+      request.assignedDonors.some(
+        (assignment) =>
+          assignment.donorUid === donorId
+      );
+
+    if (alreadyAssigned) {
+      return res.status(409).json({
+        error:
+          'Donor is already assigned to this request'
+      });
+    }
+
+    const totalAssigned =
+      request.assignedDonors.reduce(
+        (total, assignment) =>
+          total +
+          Number(
+            assignment.unitsAssigned || 0
+          ),
+        0
+      );
+
+    if (
+      totalAssigned + unitsToAssign >
+      request.unitsNeeded
+    ) {
+      return res.status(400).json({
+        error:
+          `Only ${Math.max(
+            0,
+            request.unitsNeeded - totalAssigned
+          )} unit(s) remain`
+      });
+    }
+
+    request.assignedDonors.push({
+      donorUid: donorId,
+      unitsAssigned: unitsToAssign,
+      unitsCompleted: 0,
+      assignedAt: new Date()
+    });
+
+    request.assignedByAdmin = adminId;
+    request.updatedAt = new Date();
+
+    await request.save();
+
+    try {
+      await Notification.create({
+        donorId: donor.uid,
+        adminId: null,
+        requestId: request._id,
+        type: 'request_assigned',
+        title: 'You Were Assigned to a Blood Request',
+        message:
+          `An administrator assigned you to donate ${unitsToAssign} unit(s) ` +
+          `for ${request.fname} ${request.lname}.`,
+        read: false,
+        actionTaken: false,
+        createdAt: new Date()
+      });
+    } catch (notificationError) {
+      console.error(
+        '[REQUESTER] Assignment saved, but donor notification failed:',
+        notificationError.message
+      );
+    }
+
+    res.json({
+      message:
+        'Blood request assigned to donor',
+      requester: request
+    });
   } catch (error) {
-    console.error('[REQUESTER] Error assigning request:', error.message);
-    res.status(500).json({ error: error.message });
+    console.error(
+      '[REQUESTER] Error assigning request:',
+      error.message
+    );
+
+    res.status(500).json({
+      error: error.message
+    });
   }
 };
 
@@ -174,19 +384,32 @@ const assignRequestToDonor = async (req, res) => {
 const assignSelfToRequest = async (req, res) => {
   try {
     const { id } = req.params;
-    const { unitsRequested } = req.body; // Optional: number of units donor wants to take (default 1)
+    const unitsToAssign = Number(req.body.unitsRequested ?? 1);
     const donorId = req.user?.uid; // From auth middleware
 
     if (!donorId) {
       return res.status(401).json({ error: 'Donor ID not found in token' });
     }
-
     console.log('[REQUESTER] Donor self-assigning to request:', id, 'Donor:', donorId);
-
+    if (
+      !Number.isInteger(unitsToAssign) ||
+      unitsToAssign < 1
+    ) {
+      return res.status(400).json({
+        error:
+          'Units requested must be a positive integer'
+      });
+    }
     // Get the request
     const request = await Requester.findById(id);
     if (!request) {
       return res.status(404).json({ error: 'Blood request not found' });
+    }
+    if (request.status !== 'pending') {
+      return res.status(400).json({
+        error:
+          'This blood request is no longer active'
+      });
     }
 
     // Check if donor is already assigned to this request
@@ -197,7 +420,6 @@ const assignSelfToRequest = async (req, res) => {
 
     // Calculate total units already assigned
     const totalAssigned = request.assignedDonors?.reduce((sum, d) => sum + d.unitsAssigned, 0) || 0;
-    const unitsToAssign = unitsRequested || 1;
 
     // Check if enough units are available
     if (totalAssigned + unitsToAssign > request.unitsNeeded) {
@@ -210,6 +432,12 @@ const assignSelfToRequest = async (req, res) => {
     const donor = await User.findOne({ uid: donorId, role: 'donor' });
     if (!donor) {
       return res.status(404).json({ error: 'Donor not found' });
+    }
+    if (!donor.verifiedByAdmin) {
+      return res.status(403).json({
+        error:
+          'Account pending admin verification'
+      });
     }
 
     if (donor.bloodType !== request.bloodType) {
@@ -379,11 +607,19 @@ const getDonorNotifications = async (req, res) => {
       return res.status(401).json({ error: 'Donor ID not found in token' });
     }
 
-    const notifications = await Notification.find({ donorId })
+    const donorFilter = {
+      donorId,
+      adminId: null
+    };
+
+    const notifications = await Notification.find(donorFilter)
       .sort({ createdAt: -1 })
       .populate('requestId', 'bloodType hospital unitsNeeded status');
 
-    const unreadCount = await Notification.countDocuments({ donorId, read: false });
+    const unreadCount = await Notification.countDocuments({
+      ...donorFilter,
+      read: false
+    });
 
     console.log(`[NOTIFICATION] Retrieved ${notifications.length} notifications for donor ${donorId}`);
     res.json({ notifications, unreadCount });
@@ -774,6 +1010,7 @@ export default {
   getAllRequesters,
   getRequesterById,
   createRequester,
+  getMyRequests,
   updateRequester,
   deleteRequester,
   assignRequestToDonor,
@@ -785,6 +1022,5 @@ export default {
   getAssignedRequests,
   getDonationHistory,
   getAllDonations,
-  // completeDonation,
   cancelAssignment
 };

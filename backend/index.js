@@ -9,24 +9,16 @@ import User from './models/User.js';
 
 // Import all route files
 import routes from './routes/routes.js';
-import userRoutes from './Routes/User/userRoutes.js';
+import userRoutes from './routes/User/userRoutes.js';
 import requestRoutes from './routes/Request/requestRoutes.js';
-import hospitalRoutes from './Routes/Hospital/hospitalRoutes.js';
-import appointmentRoutes from './Routes/Appointment/appointmentRoutes.js';
-import alertRoutes from './Routes/Alert/alertRoutes.js';
-import profileRoutes from './Routes/Profile/profileRoutes.js';
-import donationRoutes from './Routes/Donation/donationRoutes.js';
+import hospitalRoutes from './routes/Hospital/hospitalRoutes.js';
+import appointmentRoutes from './routes/Appointment/appointmentRoutes.js';
+import alertRoutes from './routes/Alert/alertRoutes.js';
+import profileRoutes from './routes/Profile/profileRoutes.js';
+import donationRoutes from './routes/Donation/donationRoutes.js';
 
 // Import security middleware
-import {
-  helmetMiddleware,
-  corsMiddleware,
-  generalLimiter,
-  authLimiter,
-  sanitizeDataMiddleware,
-  genericErrorHandler,
-  noCacheMiddleware
-} from './middleware/securityMiddleware.js';
+import { helmetMiddleware, corsMiddleware, generalLimiter, sanitizeDataMiddleware, genericErrorHandler, noCacheMiddleware } from './middleware/securityMiddleware.js';
 
 const mongoString = env.MONGODB_URI;
 

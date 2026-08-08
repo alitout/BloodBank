@@ -19,11 +19,12 @@ const userSchema = new mongoose.Schema({
     },
     password: {
         type: String,
-        required: true
+        required: true,
+        select: false
     },
     role: {
         type: String,
-        enum: ['donor', 'super_admin'],
+        enum: ['donor', 'hospital', 'super_admin'],
         required: true
     },
 
@@ -71,6 +72,32 @@ const userSchema = new mongoose.Schema({
         required: function () { return this.role === 'super_admin'; }
     },
 
+    // Hospital account fields
+    hospitalName: {
+        type: String,
+        required: function () {
+            return this.role === 'hospital';
+        }
+    },
+    hospitalContactName: {
+        type: String,
+        required: function () {
+            return this.role === 'hospital';
+        }
+    },
+    hospitalContactTitle: {
+        type: String,
+        required: function () {
+            return this.role === 'hospital';
+        }
+    },
+    hospitalAddress: {
+        type: String,
+        required: function () {
+            return this.role === 'hospital';
+        }
+    },
+
     // Common fields
     verifiedByAdmin: {
         type: Boolean,
@@ -78,6 +105,31 @@ const userSchema = new mongoose.Schema({
     },
     refreshTokenHash: {
         type: String,
+        default: null,
+        select: false
+    },
+    createdBy: {
+        type: String,
+        default: null
+    },
+    updatedBy: {
+        type: String,
+        default: null
+    },
+    verifiedAt: {
+        type: Date,
+        default: null
+    },
+    verifiedBy: {
+        type: String,
+        default: null
+    },
+    lastLogin: {
+        type: Date,
+        default: null
+    },
+    lastLogout: {
+        type: Date,
         default: null
     },
     createdAt: {

@@ -38,10 +38,6 @@ class ProfileController {
 
       await profileRequest.save();
 
-      // Set user's verification status to pending (not verified)
-      user.verifiedByAdmin = false;
-      await user.save();
-
       // Create notification for admins
       await ProfileController.createAdminNotification(
         profileRequest,
@@ -129,6 +125,12 @@ class ProfileController {
         return res.status(404).json({ message: 'Profile request not found' });
       }
 
+      if (profileRequest.status !== 'pending') {
+        return res.status(409).json({
+          message: 'Profile request has already been processed'
+        });
+      }
+
       // Update request status
       profileRequest.status = status;
       profileRequest.processedByAdmin = adminID;
@@ -153,10 +155,61 @@ class ProfileController {
         }
       } else if (status === 'rejected') {
         profileRequest.rejectedAt = new Date();
-        profileRequest.rejectionReason = rejectionReason || null;
+        profileRequest.rejectionReason =
+          rejectionReason || null;
+
+        if (
+          profileRequest.requestType ===
+          'profile_update'
+        ) {
+          await User.updateOne(
+            {
+              uid: profileRequest.uid
+            },
+            {
+              $set: {
+                verifiedByAdmin: true,
+                updatedAt: new Date()
+              }
+            }
+          );
+        }
       }
 
       await profileRequest.save();
+
+      if (
+        status === 'rejected' &&
+        profileRequest.requestType === 'profile_update'
+      ) {
+        await Notification.create({
+          donorId: profileRequest.uid,
+          adminId: null,
+          profileRequestId: profileRequest._id,
+          type: 'profile_update_rejected',
+          title: 'Profile Update Rejected',
+          message: rejectionReason
+            ? `Your profile update request was rejected. Reason: ${rejectionReason}`
+            : 'Your profile update request was rejected by an administrator.',
+          read: false,
+          actionTaken: false,
+          createdAt: new Date()
+        });
+      }
+      await Notification.updateMany(
+        {
+          profileRequestId: profileRequest._id,
+          type: 'profile_request'
+        },
+        {
+          $set: {
+            read: true,
+            readAt: new Date(),
+            actionTaken: true,
+            action: status
+          }
+        }
+      );
 
       res.status(200).json({
         message: `Profile request ${status} successfully`,
@@ -189,12 +242,14 @@ class ProfileController {
         }
 
         return new Notification({
-          donorId: admin._id.toString(),
-          requestId: profileRequest._id,
+          donorId: null,
+          adminId: admin.uid,
+          profileRequestId: profileRequest._id,
           type: 'profile_request',
-          title: title,
-          message: message,
+          title,
+          message,
           read: false,
+          actionTaken: false,
         });
       });
 

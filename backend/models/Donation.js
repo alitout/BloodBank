@@ -76,6 +76,15 @@ const donationSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    rejectedAt: {
+      type: Date,
+      default: null,
+    },
+
+    rejectedBy: {
+      type: String,
+      default: null,
+    },
 
     // Official donation date
     donationDate: {
