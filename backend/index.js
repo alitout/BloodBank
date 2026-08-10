@@ -5,10 +5,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import mongoSanitize from 'express-mongo-sanitize';
 
-import User from './models/User.js';
-
 // Import all route files
-import routes from './routes/routes.js';
 import userRoutes from './routes/User/userRoutes.js';
 import requestRoutes from './routes/Request/requestRoutes.js';
 import hospitalRoutes from './routes/Hospital/hospitalRoutes.js';
@@ -69,8 +66,11 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Register all routes
-app.use('/', routes);
+// Apply general rate limiting to all API routes
+app.use(
+  '/api',
+  generalLimiter
+);
 
 // API Routes - Auth routes with stricter rate limiting applied in router
 app.use('/api/auth', userRoutes);
@@ -80,8 +80,6 @@ app.use('/api/hospitals', hospitalRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/donations', donationRoutes);
-
-
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
@@ -96,7 +94,18 @@ const server = app.listen(PORT, '0.0.0.0', async () => {
   console.log(`🔒 Security Features Enabled:`);
   console.log(`   - Helmet security headers`);
   console.log(`   - CORS: ${env.FRONTEND_URL}`);
-  console.log(`   - Rate limiting: 100/15min (general), 5/15min (auth)`);
-  console.log(`   - Input sanitization`);
+  console.log(
+    `   - General rate limit: ${env.NODE_ENV === 'production'
+      ? 300
+      : 2000
+    }/15min`
+  );
+
+  console.log(
+    `   - Authentication rate limit: ${env.NODE_ENV === 'production'
+      ? 10
+      : 100
+    } failed attempts/15min`
+  ); console.log(`   - Input sanitization`);
   console.log(`   - NoSQL injection prevention`);
 });

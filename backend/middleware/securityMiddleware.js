@@ -3,59 +3,164 @@ import helmet from 'helmet';
 import mongoSanitize from 'express-mongo-sanitize';
 import validator from 'validator';
 import cors from 'cors';
+import { env } from '../config/env.js';
 
-const rateLimitHandler = (req, res) => {
-  res.status(429).json({ error: 'Too many requests from this IP, please try again later.' });
+const rateLimitHandler = (
+  req,
+  res
+) => {
+  return res.status(429).json({
+    error:
+      'Too many requests. Please try again later.',
+    code:
+      'GENERAL_RATE_LIMIT_EXCEEDED'
+  });
 };
 
-const authLimitHandler = (req, res) => {
-  res.status(429).json({ error: 'Too many authentication attempts. Please try again in 15 minutes.' });
+const authLimitHandler = (
+  req,
+  res
+) => {
+  return res.status(429).json({
+    error:
+      'Too many authentication attempts. Please try again later.',
+    code:
+      'AUTH_RATE_LIMIT_EXCEEDED'
+  });
 };
 
-const strictLimitHandler = (req, res) => {
-  res.status(429).json({ error: 'Too many operations from this IP. Please try again later.' });
+const strictLimitHandler = (
+  req,
+  res
+) => {
+  return res.status(429).json({
+    error:
+      'Too many sensitive operations. Please try again later.',
+    code:
+      'STRICT_RATE_LIMIT_EXCEEDED'
+  });
 };
 
-/**
- * General API rate limiter: 100 requests per 15 minutes per IP
- * Skips auth routes (they have their own limiter with stricter limits)
+/*
+ * These routes have their own authLimiter,
+ * so generalLimiter must not count them too.
+ *
+ * Use originalUrl because generalLimiter is
+ * mounted at /api.
  */
-export const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
-  handler: rateLimitHandler,
-  standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
-  legacyHeaders: false, // Disable `X-RateLimit-*` headers
-  skip: (req) => {
-    // Skip auth routes and health check (they have their own limiters)
-    // Also skip preflight OPTIONS requests to prevent browser CORS preflight from counting against the limit
-    return req.path === '/health' || req.path.startsWith('/api/auth') || req.method === 'OPTIONS';
-  }
-});
+const authLimitedPaths =
+  new Set([
+    '/api/auth/login',
+    '/api/auth/register',
+    '/api/auth/refresh-token'
+  ]);
 
-/**
- * Auth rate limiter: 50 attempts per 15 minutes per IP (increased for development testing)
- * Applied to: /auth/login, /auth/register, /auth/refresh-token
- */
-export const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 50, // Increased from 5 to 50 for development
-  handler: authLimitHandler,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+export const generalLimiter =
+  rateLimit({
+    windowMs:
+      15 * 60 * 1000,
 
-/**
- * Strict rate limiter for sensitive operations: 10 per hour
- * Applied to: admin operations, profile updates, password changes
- */
-export const strictLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10,
-  handler: strictLimitHandler,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+    /*
+     * A React application can easily make
+     * more than 100 API calls because of
+     * polling, dashboard loading and
+     * notification refreshes.
+     */
+    max:
+      env.NODE_ENV ===
+        'production'
+        ? 300
+        : 2000,
+
+    handler:
+      rateLimitHandler,
+
+    standardHeaders:
+      true,
+
+    legacyHeaders:
+      false,
+
+    skip: (req) => {
+      /*
+       * Do not count CORS preflight.
+       */
+      if (
+        req.method ===
+        'OPTIONS'
+      ) {
+        return true;
+      }
+
+      const requestPath =
+        req.originalUrl
+          .split('?')[0]
+          .replace(/\/+$/, '');
+
+      /*
+       * Login, registration and refresh
+       * already use authLimiter.
+       */
+      return authLimitedPaths.has(
+        requestPath
+      );
+    }
+  });
+
+export const authLimiter =
+  rateLimit({
+    windowMs:
+      15 * 60 * 1000,
+
+    /*
+     * Development needs additional attempts
+     * for repeated manual testing.
+     */
+    max:
+      env.NODE_ENV ===
+        'production'
+        ? 10
+        : 100,
+
+    handler:
+      authLimitHandler,
+
+    standardHeaders:
+      true,
+
+    legacyHeaders:
+      false,
+
+    /*
+     * Only unsuccessful requests count
+     * toward brute-force protection.
+     * A successful login resets the practical
+     * login-attempt problem for that IP.
+     */
+    skipSuccessfulRequests:
+      true
+  });
+
+export const strictLimiter =
+  rateLimit({
+    windowMs:
+      60 * 60 * 1000,
+
+    max:
+      env.NODE_ENV ===
+        'production'
+        ? 20
+        : 200,
+
+    handler:
+      strictLimitHandler,
+
+    standardHeaders:
+      true,
+
+    legacyHeaders:
+      false
+  });
 
 export const helmetMiddleware = helmet({
   contentSecurityPolicy: false, // Disable CSP for API (not needed for backend API)
