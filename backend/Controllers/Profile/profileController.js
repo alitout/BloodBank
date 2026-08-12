@@ -1,57 +1,168 @@
 import ProfileRequest from '../../models/ProfileRequest.js';
 import User from '../../models/User.js';
 import { Notification } from '../../models/Notification.js';
+import { validateDateOfBirth } from "../../utils/dateOfBirth.js";
 
 class ProfileController {
   // Request profile update
   static async requestProfileUpdate(req, res) {
     try {
-      const { uid } = req.user; // From JWT token middleware
-      const { fname, lname, phone, bloodType } = req.body;
+      const { uid } = req.user;
+      const { fname, lname, phone, bloodType, dateOfBirth, biologicalSex, } = req.body;
+      const user = await User.findOne({ uid });
 
-      // Get user data
-      const user = await User.findOne({ uid: uid });
       if (!user) {
-        return res.status(404).json({ message: 'User not found' });
+        return res.status(404).json({
+          message: "User not found",
+        });
       }
 
-      // Create profile update request
       const changes = {};
-      if (fname && fname !== user.fname) changes.fname = fname;
-      if (lname && lname !== user.lname) changes.lname = lname;
-      if (phone && phone !== user.phone) changes.phone = phone;
-      if (bloodType && bloodType !== user.bloodType) changes.bloodType = bloodType;
 
-      // Check if there are any changes
-      if (Object.keys(changes).length === 0) {
-        return res.status(400).json({ message: 'No changes to request' });
+      if (fname && fname !== user.fname) {
+        changes.fname = fname;
       }
 
-      // Create the profile request
-      const profileRequest = new ProfileRequest({
-        uid: uid,
-        email: user.email,
-        requestType: 'profile_update',
-        changes: changes,
-        status: 'pending',
-      });
+      if (lname && lname !== user.lname) {
+        changes.lname = lname;
+      }
+
+      if (phone && phone !== user.phone) {
+        changes.phone = phone;
+      }
+
+      if (
+        bloodType &&
+        bloodType !== user.bloodType
+      ) {
+        changes.bloodType = bloodType;
+      }
+
+      if (
+        dateOfBirth !== undefined ||
+        biologicalSex !== undefined
+      ) {
+        if (user.role !== "donor") {
+          return res.status(400).json({
+            message:
+              "Donation eligibility fields are only available for donor accounts",
+          });
+        }
+      }
+
+      if (dateOfBirth !== undefined) {
+        const validation =
+          validateDateOfBirth(dateOfBirth);
+
+        if (!validation.valid) {
+          return res.status(400).json({
+            message: validation.error,
+            code: validation.code,
+          });
+        }
+
+        const existingDate =
+          user.dateOfBirth
+            ? new Date(user.dateOfBirth)
+              .toISOString()
+              .slice(0, 10)
+            : null;
+
+        const requestedDate =
+          validation.date
+            .toISOString()
+            .slice(0, 10);
+
+        if (existingDate !== requestedDate) {
+          changes.dateOfBirth =
+            validation.date;
+        }
+      }
+
+      if (biologicalSex !== undefined) {
+        const normalizedSex =
+          typeof biologicalSex === "string"
+            ? biologicalSex
+              .trim()
+              .toLowerCase()
+            : "";
+
+        if (
+          !["male", "female"].includes(
+            normalizedSex
+          )
+        ) {
+          return res.status(400).json({
+            message:
+              "Biological sex must be male or female",
+            code:
+              "INVALID_BIOLOGICAL_SEX",
+          });
+        }
+
+        if (
+          normalizedSex !==
+          user.biologicalSex
+        ) {
+          changes.biologicalSex =
+            normalizedSex;
+        }
+      }
+
+      if (Object.keys(changes).length === 0) {
+        return res.status(400).json({
+          message: "No changes to request",
+        });
+      }
+
+      const existingPendingRequest =
+        await ProfileRequest.findOne({
+          uid,
+          requestType: "profile_update",
+          status: "pending",
+        });
+
+      if (existingPendingRequest) {
+        return res.status(409).json({
+          message:
+            "You already have a pending profile update request",
+          code:
+            "PROFILE_UPDATE_ALREADY_PENDING",
+        });
+      }
+
+      const profileRequest =
+        new ProfileRequest({
+          uid,
+          email: user.email,
+          requestType: "profile_update",
+          changes,
+          status: "pending",
+        });
 
       await profileRequest.save();
 
-      // Create notification for admins
       await ProfileController.createAdminNotification(
         profileRequest,
         user,
-        'profile_update_request'
+        "profile_update_request"
       );
 
-      res.status(201).json({
-        message: 'Profile update request submitted successfully',
+      return res.status(201).json({
+        message:
+          "Profile update request submitted successfully",
         profileRequest,
       });
-    } catch (err) {
-      console.error('Error requesting profile update:', err);
-      res.status(500).json({ message: 'Error submitting profile update request', error: err.message });
+    } catch (error) {
+      console.error(
+        "Error requesting profile update:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Error submitting profile update request",
+      });
     }
   }
 
@@ -177,6 +288,28 @@ class ProfileController {
       }
 
       await profileRequest.save();
+
+      await Notification.updateMany(
+        {
+          profileRequestId:
+            profileRequest._id,
+
+          type:
+            "profile_request",
+
+          actionTaken: {
+            $ne: true,
+          },
+        },
+        {
+          $set: {
+            read: true,
+            readAt: new Date(),
+            actionTaken: true,
+            action: status,
+          },
+        }
+      );
 
       if (
         status === 'rejected' &&

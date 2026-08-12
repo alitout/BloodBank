@@ -474,28 +474,6 @@ export const AssignedRequests = () => {
                 </div>
               )}
 
-              {/* Actions */}
-              {/* <div className="flex gap-3 p-4 border-t border-slate-200 bg-slate-50">
-                <button
-                  onClick={() => handleCompleteDonation(request)}
-                  disabled={processingId === request._id}
-                  className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
-                >
-                  <CheckCircle className="w-4 h-4" />
-                  {language === "ar"
-                    ? "تم التبرع"
-                    : "Donation Done"}
-                </button>
-                <button
-                  onClick={() => handleCancelAssignment(request._id)}
-                  disabled={processingId === request._id}
-                  className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
-                >
-                  <XCircle className="w-4 h-4" />
-                  {language === "ar" ? "إلغاء" : "Cancel"}
-                </button>
-
-              </div> */}
               {request.description && (
                 <div className="px-4 py-3 border-t border-slate-200 bg-white">
                   <p className="text-xs text-slate-600 mb-1">

@@ -2,17 +2,58 @@ import Requester from '../../models/Requests.js';
 import User from '../../models/User.js';
 import Donation from '../../models/Donation.js';
 import { Notification } from '../../models/Notification.js';
+import { assessDonorForRequest, findPlatformEligibleDonorsForRequest, getApprovedDonationHistory, } from "../../services/donorEligibilityService.js";
 
 // Get all blood requests
 const getAllRequesters = async (req, res) => {
   try {
-    //console.log('[REQUESTER] Fetching all blood requests...');
-    const requesters = await Requester.find({});
-    //console.log(`[REQUESTER] Found ${requesters.length} blood requests`);
-    res.json(requesters);
+    const requesters =
+      await Requester.find({}).sort({
+        createdAt: -1,
+      });
+
+    if (req.user?.role !== "donor") {
+      return res.json(requesters);
+    }
+
+    const donor = await User.findOne({
+      uid: req.user.uid,
+      role: "donor",
+    });
+
+    if (!donor) {
+      return res.status(404).json({
+        error: "Donor not found",
+      });
+    }
+
+    const donations =
+      await getApprovedDonationHistory(
+        donor.uid
+      );
+
+    const enrichedRequests =
+      requesters.map((request) => ({
+        ...request.toObject(),
+
+        connectionAssessment:
+          assessDonorForRequest({
+            donor,
+            request,
+            donations,
+          }),
+      }));
+
+    return res.json(enrichedRequests);
   } catch (error) {
-    console.error('[REQUESTER] Error fetching requests:', error.message);
-    res.status(500).json({ error: error.message });
+    console.error(
+      "[REQUESTER] Error fetching requests:",
+      error.message
+    );
+
+    return res.status(500).json({
+      error: "Failed to fetch requests",
+    });
   }
 };
 
@@ -272,25 +313,41 @@ const assignRequestToDonor = async (req, res) => {
       });
     }
 
-    if (
-      !donor.verifiedByAdmin ||
-      donor.status !== 'eligible'
-    ) {
-      return res.status(400).json({
-        error: 'Donor is not currently eligible'
-      });
-    }
-
     if (request.status !== 'pending') {
       return res.status(400).json({
         error: 'Blood request is not active'
       });
     }
 
-    if (donor.bloodType !== request.bloodType) {
-      return res.status(400).json({
+    const donations =
+      await getApprovedDonationHistory(
+        donor.uid
+      );
+
+    const connectionAssessment =
+      assessDonorForRequest({
+        donor,
+        request,
+        donations,
+      });
+
+    if (
+      !connectionAssessment.platformEligible
+    ) {
+      return res.status(409).json({
         error:
-          'Donor blood type does not match the request'
+          "Donor cannot connect to this request through the platform",
+
+        code:
+          connectionAssessment.reasons[0] ||
+          "DONOR_NOT_PLATFORM_ELIGIBLE",
+
+        reasons:
+          connectionAssessment.reasons,
+
+        nextEligibleDate:
+          connectionAssessment
+            .nextEligibleDate,
       });
     }
 
@@ -433,21 +490,48 @@ const assignSelfToRequest = async (req, res) => {
     if (!donor) {
       return res.status(404).json({ error: 'Donor not found' });
     }
-    if (!donor.verifiedByAdmin) {
-      return res.status(403).json({
+    const donations =
+      await getApprovedDonationHistory(
+        donorId
+      );
+
+    const connectionAssessment =
+      assessDonorForRequest({
+        donor,
+        request,
+        donations,
+      });
+
+    if (
+      !connectionAssessment.platformEligible
+    ) {
+      const primaryReason =
+        connectionAssessment.reasons[0] ||
+        "DONOR_NOT_PLATFORM_ELIGIBLE";
+
+      const statusCode = [
+        "ACCOUNT_NOT_VERIFIED",
+        "ACCOUNT_DEFERRED",
+      ].includes(primaryReason)
+        ? 403
+        : 409;
+
+      return res.status(statusCode).json({
         error:
-          'Account pending admin verification'
+          "You cannot connect to this request through the platform at this time.",
+
+        code: primaryReason,
+
+        reasons:
+          connectionAssessment.reasons,
+
+        nextEligibleDate:
+          connectionAssessment
+            .nextEligibleDate,
+
+        connectionAssessment,
       });
     }
-
-    if (donor.bloodType !== request.bloodType) {
-      return res.status(400).json({ error: 'Your blood type does not match this request' });
-    }
-
-    if (donor.status !== 'eligible') {
-      return res.status(400).json({ error: 'You are not eligible to donate at this time' });
-    }
-
     // Add donor to assignedDonors array
     request.assignedDonors.push({
       donorUid: donorId,
@@ -555,49 +639,113 @@ const getAllDonations = async (req, res) => {
 // Get available requests for a donor (matching blood type)
 const getAvailableRequests = async (req, res) => {
   try {
-    const donorId = req.user?.uid; // From auth middleware
+    const donorId = req.user?.uid;
 
     if (!donorId) {
-      return res.status(401).json({ error: 'Donor ID not found in token' });
+      return res.status(401).json({
+        error:
+          "Donor ID not found in token",
+      });
     }
 
-    // Get donor's blood type
-    const donor = await User.findOne({ uid: donorId, role: 'donor' });
+    const donor = await User.findOne({
+      uid: donorId,
+      role: "donor",
+    });
+
     if (!donor) {
-      return res.status(404).json({ error: 'Donor not found' });
+      return res.status(404).json({
+        error: "Donor not found",
+      });
     }
 
-    // Find pending requests with matching blood type
-    const requests = await Requester.find({
-      bloodType: donor.bloodType,
-      status: 'pending'
-    }).sort({ createdAt: -1 });
+    const [requests, donations] =
+      await Promise.all([
+        Requester.find({
+          status: "pending",
+        }).sort({
+          createdAt: -1,
+        }),
 
-    // Filter requests with available units
-    const availableRequests = requests.filter(req => {
-      const totalAssigned = req.assignedDonors?.reduce((sum, d) => sum + d.unitsAssigned, 0) || 0;
-      const unitsAvailable = req.unitsNeeded - totalAssigned;
-      return unitsAvailable > 0 && !req.assignedDonors?.some(d => d.donorUid === donorId);
+        getApprovedDonationHistory(
+          donorId
+        ),
+      ]);
+
+    const availableRequests = requests
+      .map((request) => {
+        const totalAssigned =
+          request.assignedDonors?.reduce(
+            (total, assignment) =>
+              total +
+              Number(
+                assignment.unitsAssigned ||
+                0
+              ),
+            0
+          ) || 0;
+
+        const unitsAvailable =
+          request.unitsNeeded -
+          totalAssigned;
+
+        const alreadyAssigned =
+          request.assignedDonors?.some(
+            (assignment) =>
+              assignment.donorUid ===
+              donorId
+          );
+
+        const connectionAssessment =
+          assessDonorForRequest({
+            donor,
+            request,
+            donations,
+          });
+
+        return {
+          ...request.toObject(),
+
+          unitsAssigned:
+            totalAssigned,
+
+          unitsAvailable,
+
+          alreadyAssigned:
+            Boolean(alreadyAssigned),
+
+          connectionAssessment,
+        };
+      })
+      .filter(
+        (request) =>
+          request.unitsAvailable > 0 &&
+          !request.alreadyAssigned &&
+          request.connectionAssessment
+            .compatible
+      );
+
+    return res.json({
+      availableRequests,
+
+      donorBloodType:
+        donor.bloodType,
+
+      hospitalScreeningRequired:
+        true,
     });
-
-    // Add available units count to each request
-    const enrichedRequests = availableRequests.map(req => {
-      const totalAssigned = req.assignedDonors?.reduce((sum, d) => sum + d.unitsAssigned, 0) || 0;
-      return {
-        ...req.toObject(),
-        unitsAssigned: totalAssigned,
-        unitsAvailable: req.unitsNeeded - totalAssigned
-      };
-    });
-
-    console.log(`[REQUESTER] Found ${enrichedRequests.length} available requests for donor ${donorId}`);
-    res.json({ availableRequests: enrichedRequests, donorBloodType: donor.bloodType });
   } catch (error) {
-    console.error('[REQUESTER] Error fetching available requests:', error.message);
-    res.status(500).json({ error: error.message });
+    console.error(
+      "[REQUESTER] Available requests error:",
+      error.message
+    );
+
+    return res.status(500).json({
+      error:
+        "Failed to fetch available requests",
+    });
   }
 };
-
 // Get notifications for a donor
 const getDonorNotifications = async (req, res) => {
   try {
@@ -659,70 +807,100 @@ const markNotificationAsRead = async (req, res) => {
   }
 };
 
-// Manually match and notify donors for a specific request
-const matchAndNotifyDonors = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const adminId = req.user?.uid; // From auth middleware
+const findAndNotifyMatchingDonors =
+  async (request) => {
+    try {
+      const matchingDonors =
+        await findPlatformEligibleDonorsForRequest(
+          request
+        );
 
-    if (!adminId) {
-      return res.status(401).json({ error: 'Admin ID not found in token' });
-    }
+      if (matchingDonors.length === 0) {
+        console.log(
+          `[NOTIFICATION] No platform-eligible donors found for request ${request._id}`
+        );
 
-    // Get the request
-    const request = await Requester.findById(id);
-    if (!request) {
-      return res.status(404).json({ error: 'Blood request not found' });
-    }
-
-    console.log('[REQUESTER] Admin manually matching donors for request:', id);
-
-    // Find matching donors
-    const matchingDonors = await User.find({
-      role: 'donor',
-      bloodType: request.bloodType,
-      status: 'eligible'
-    });
-
-    console.log(`[NOTIFICATION] Found ${matchingDonors.length} eligible donors for blood type ${request.bloodType}`);
-
-    // Create notifications for matching donors (skip if they already have a notification for this request)
-    const newNotifications = [];
-    for (const donor of matchingDonors) {
-      const existingNotification = await Notification.findOne({
-        donorId: donor.uid,
-        requestId: id
-      });
-
-      if (!existingNotification) {
-        newNotifications.push({
-          donorId: donor.uid,
-          requestId: request._id,
-          type: 'request_available',
-          title: `New Blood Request Available`,
-          message: `A new ${request.bloodType} blood request is available at ${request.hospital}. Units needed: ${request.unitsNeeded}. Click to view and assign yourself if interested.`,
-          read: false,
-          actionTaken: false
-        });
+        return {
+          eligibleDonors: 0,
+          notificationsCreated: 0,
+        };
       }
-    }
 
-    if (newNotifications.length > 0) {
-      await Notification.insertMany(newNotifications);
-      console.log(`[NOTIFICATION] Created ${newNotifications.length} new notifications for request ${id}`);
-    }
+      const donorUids =
+        matchingDonors.map(
+          (donor) => donor.uid
+        );
 
-    res.json({
-      message: `Matched and notified ${newNotifications.length} eligible donors`,
-      totalEligibleDonors: matchingDonors.length,
-      newNotificationsSent: newNotifications.length,
-      request: request
-    });
-  } catch (error) {
-    console.error('[REQUESTER] Error matching and notifying donors:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-};
+      /*
+       * Prevent duplicate notifications if this helper
+       * is accidentally called more than once.
+       */
+      const existingNotifications =
+        await Notification.find({
+          requestId: request._id,
+          donorId: {
+            $in: donorUids,
+          },
+          type: "request_available",
+        })
+          .select("donorId")
+          .lean();
+
+      const alreadyNotified = new Set(
+        existingNotifications.map(
+          (notification) =>
+            notification.donorId
+        )
+      );
+
+      const notifications =
+        matchingDonors
+          .filter(
+            (donor) =>
+              !alreadyNotified.has(donor.uid)
+          )
+          .map((donor) => ({
+            donorId: donor.uid,
+            requestId: request._id,
+            type: "request_available",
+
+            title:
+              "New Potential Donation Request",
+
+            message:
+              `A potentially compatible ${request.bloodGenre} request is available at ${request.hospital}. ` +
+              `The hospital performs all medical screening and makes the final donation decision.`,
+
+            read: false,
+            actionTaken: false,
+          }));
+
+      if (notifications.length > 0) {
+        await Notification.insertMany(
+          notifications
+        );
+      }
+
+      console.log(
+        `[NOTIFICATION] Found ${matchingDonors.length} platform-eligible donors and created ${notifications.length} notifications`
+      );
+
+      return {
+        eligibleDonors:
+          matchingDonors.length,
+
+        notificationsCreated:
+          notifications.length,
+      };
+    } catch (error) {
+      console.error(
+        "[NOTIFICATION] Matching error:",
+        error.message
+      );
+
+      throw error;
+    }
+  };
 
 // Get assigned requests for the authenticated donor
 const getAssignedRequests = async (req, res) => {
@@ -990,19 +1168,56 @@ const cancelAssignment = async (req, res) => {
 const getRequesterById = async (req, res) => {
   try {
     const { id } = req.params;
-    console.log('[REQUESTER] Fetching request by ID:', id);
 
-    const request = await Requester.findById(id);
+    const request =
+      await Requester.findById(id);
+
     if (!request) {
-      console.log('[REQUESTER] Request not found:', id);
-      return res.status(404).json({ error: 'Blood request not found' });
+      return res.status(404).json({
+        error:
+          "Blood request not found",
+      });
     }
 
-    console.log('[REQUESTER] Request found:', id);
-    res.json(request);
+    const response = request.toObject();
+
+    if (req.user?.role === "donor") {
+      const donor =
+        await User.findOne({
+          uid: req.user.uid,
+          role: "donor",
+        });
+
+      if (!donor) {
+        return res.status(404).json({
+          error: "Donor not found",
+        });
+      }
+
+      const donations =
+        await getApprovedDonationHistory(
+          donor.uid
+        );
+
+      response.connectionAssessment =
+        assessDonorForRequest({
+          donor,
+          request,
+          donations,
+        });
+    }
+
+    return res.json(response);
   } catch (error) {
-    console.error('[REQUESTER] Error fetching request:', error.message);
-    res.status(500).json({ error: error.message });
+    console.error(
+      "[REQUESTER] Request details error:",
+      error.message
+    );
+
+    return res.status(500).json({
+      error:
+        "Failed to fetch blood request",
+    });
   }
 };
 
@@ -1018,7 +1233,7 @@ export default {
   getAvailableRequests,
   getDonorNotifications,
   markNotificationAsRead,
-  matchAndNotifyDonors,
+  findAndNotifyMatchingDonors,
   getAssignedRequests,
   getDonationHistory,
   getAllDonations,

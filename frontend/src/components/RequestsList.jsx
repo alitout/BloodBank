@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { useLanguage } from "./LanguageContext.jsx";
 import { useAuth } from "./AuthContext.jsx";
 import { useDB } from "./DBContext.jsx";
@@ -6,6 +6,7 @@ import { useDataCache } from "./DataCacheContext.jsx";
 import { API_BASE_URL, getAccessToken } from "../utils/api.js";
 import { useNavigate } from "react-router-dom";
 import { Heart, Loader, AlertCircle, Check, Droplet, MapPin, Users, Search, Filter, Lock, Eye } from "lucide-react";
+import { getConnectionBlockReason, getWaitingPeriodInformation } from "../utils/connectionAssessment.js";
 
 export const RequestsList = () => {
   const { t, language } = useLanguage();
@@ -24,86 +25,6 @@ export const RequestsList = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [bloodTypeFilter, setBloodTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-
-  const cooldownInformation = useMemo(() => {
-    if (
-      user?.status !== "cool-down" ||
-      !user?.nextEligibleDate
-    ) {
-      return {
-        isInCoolDown: false,
-        nextEligibleDate: null,
-        remainingDays: 0,
-        formattedNextEligibleDate: null,
-      };
-    }
-
-    const nextEligibleDate = new Date(
-      user.nextEligibleDate
-    );
-
-    if (
-      Number.isNaN(
-        nextEligibleDate.getTime()
-      )
-    ) {
-      return {
-        isInCoolDown: false,
-        nextEligibleDate: null,
-        remainingDays: 0,
-        formattedNextEligibleDate: null,
-      };
-    }
-
-    const difference =
-      nextEligibleDate.getTime() -
-      Date.now();
-
-    if (difference <= 0) {
-      return {
-        isInCoolDown: false,
-        nextEligibleDate,
-        remainingDays: 0,
-        formattedNextEligibleDate: null,
-      };
-    }
-
-    return {
-      isInCoolDown: true,
-
-      nextEligibleDate,
-
-      remainingDays: Math.max(
-        1,
-        Math.ceil(
-          difference /
-          (24 * 60 * 60 * 1000)
-        )
-      ),
-
-      formattedNextEligibleDate:
-        nextEligibleDate.toLocaleDateString(
-          language === "ar"
-            ? "ar-LB"
-            : "en-GB",
-          {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          }
-        ),
-    };
-  }, [
-    user?.status,
-    user?.nextEligibleDate,
-    language,
-  ]);
-
-  const {
-    isInCoolDown,
-    remainingDays,
-    formattedNextEligibleDate,
-  } = cooldownInformation;
 
   // Check cache first and load initial data
   useEffect(() => {
@@ -133,22 +54,6 @@ export const RequestsList = () => {
     };
   }, [refreshUserProfile]);
 
-
-  // Blood type compatibility check
-  const isCompatibleDonor = (requiredBloodType, donorBloodType) => {
-    const compatibility = {
-      "O+": ["O+", "A+", "B+", "AB+"],
-      "O-": ["O+", "O-", "A+", "A-", "B+", "B-", "AB+", "AB-"],
-      "A+": ["A+", "AB+"],
-      "A-": ["A+", "A-", "AB+", "AB-"],
-      "B+": ["B+", "AB+"],
-      "B-": ["B+", "B-", "AB+", "AB-"],
-      "AB+": ["AB+"],
-      "AB-": ["AB+", "AB-"],
-    };
-    return compatibility[donorBloodType]?.includes(requiredBloodType) || false;
-  };
-
   // Filter logic
   const filteredRequests = requesters.filter((req) => {
     const fullName = `${req.fname || ""} ${req.fatherName || ""} ${req.lname || ""}`.toLowerCase();
@@ -168,9 +73,10 @@ export const RequestsList = () => {
     const matchesStatus =
       statusFilter === "all" ? status === "pending" : status === statusFilter;
 
-    const matchesCorrespondent =
-      !showOnlyCorrespondent ||
-      isCompatibleDonor(bloodType, user?.bloodType || "");
+    // const matchesCorrespondent =
+    //   !showOnlyCorrespondent ||
+    //   isCompatibleDonor(bloodType, user?.bloodType || "");
+    const matchesCorrespondent = !showOnlyCorrespondent || req.connectionAssessment?.compatible === true;
 
     // Check if request has available units
     const totalAssigned = req.assignedDonors?.reduce((sum, d) => sum + d.unitsAssigned, 0) || 0;
@@ -189,6 +95,24 @@ export const RequestsList = () => {
   };
 
   const handleAssignSelf = async (requestId, unitsCount) => {
+    const selectedAssessment =
+      selectedRequestForUnits
+        ?.connectionAssessment;
+
+    if (
+      selectedAssessment &&
+      !selectedAssessment
+        .platformEligible
+    ) {
+      window.alert(
+        getConnectionBlockReason(
+          selectedAssessment,
+          t
+        )
+      );
+
+      return;
+    }
     if (assignedRequests.has(requestId)) return;
 
     setAssigningId(requestId);
@@ -211,7 +135,11 @@ export const RequestsList = () => {
         throw new Error(errorData.error || "Failed to assign yourself");
       }
 
-      setAssignedRequests(new Set([...assignedRequests, requestId]));
+      setAssignedRequests((currentRequests) => {
+        const updatedRequests = new Set(currentRequests);
+        updatedRequests.add(requestId);
+        return updatedRequests;
+      });
       alert(t("donorAssignSuccess"));
       setShowUnitsModal(false);
       setSelectedRequestForUnits(null);
@@ -225,6 +153,20 @@ export const RequestsList = () => {
   };
 
   const openUnitsModal = (request) => {
+    if (
+      !request
+        ?.connectionAssessment
+        ?.platformEligible
+    ) {
+      window.alert(
+        getConnectionBlockReason(
+          request?.connectionAssessment,
+          t
+        )
+      );
+
+      return;
+    }
     const totalAssigned = request.assignedDonors?.reduce((sum, d) => sum + d.unitsAssigned, 0) || 0;
     const maxAvailable = request.unitsNeeded - totalAssigned;
     setSelectedRequestForUnits({ ...request, maxAvailable });
@@ -246,60 +188,21 @@ export const RequestsList = () => {
 
   return (
     <div className="space-y-6">
-      {/* Verification Warning */}
-      {!user?.verifiedByAdmin && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
+
           <div>
-            <p className="text-yellow-800 font-semibold text-sm">
-              {language === "ar" ? "حساب غير موثق" : "Account Not Verified"}
+            <p className="font-semibold text-blue-900">
+              {t("donationInformation")}
             </p>
-            <p className="text-yellow-700 text-sm">
-              {language === "ar"
-                ? "يجب أن يتم التحقق من حسابك بواسطة المسؤول قبل أن تتمكن من التبرع بالدم."
-                : "Your account must be verified by an admin before you can donate blood."}
+
+            <p className="text-sm text-blue-800 mt-1">
+              {t("donationMatchingDisclaimer")}
             </p>
           </div>
         </div>
-      )}
-
-      {/* Cool-down Status Warning */}
-      {isInCoolDown && (
-        <div className="flex items-start gap-3 rounded-lg border border-orange-200 bg-orange-50 p-4">
-          <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-orange-600" />
-
-          <div>
-            <p className="text-sm font-semibold text-orange-800">
-              {language === "ar"
-                ? "فترة انتظار نشطة"
-                : "Waiting Period Active"}
-            </p>
-
-            <p className="mt-1 text-sm text-orange-700">
-              {language === "ar"
-                ? `الوقت المتبقي: ${remainingDays} يوم`
-                : `Time remaining: ${remainingDays} day${remainingDays === 1
-                  ? ""
-                  : "s"
-                }`}
-            </p>
-
-            {formattedNextEligibleDate && (
-              <p className="mt-1 text-sm text-orange-700">
-                {language === "ar"
-                  ? `يمكنك التبرع مجدداً ابتداءً من: ${formattedNextEligibleDate}`
-                  : `You can donate again starting: ${formattedNextEligibleDate}`}
-              </p>
-            )}
-
-            <p className="mt-1 text-xs text-orange-700">
-              {language === "ar"
-                ? "لن تتمكن من التبرع حتى انتهاء فترة الانتظار."
-                : "You will not be able to donate until the waiting period ends."}
-            </p>
-          </div>
-        </div>
-      )}
+      </div>
 
       {/* Header Info */}
       <div className="bg-gradient-to-r from-red-50 to-red-100 border border-red-200 rounded-lg p-4">
@@ -399,80 +302,225 @@ export const RequestsList = () => {
           </p>
         </div>
       ) : (
-        /* Requests Display */
         <div className="space-y-3">
-          {filteredRequests.map(req => (
-            <div key={req.id || req._id} className={`p-4 border rounded-lg ${getStatusColor(req.status)}`}>
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <h4 className="font-bold">
-                    {req.fname} {req.fatherName} {req.lname}
-                  </h4>
-                  <p className="text-sm">{req.hospital}</p>
+          {filteredRequests.map((req) => {
+            const requestId =
+              req._id || req.id;
+
+            const assessment =
+              req.connectionAssessment;
+
+            const canDonate =
+              assessment?.platformEligible ===
+              true;
+
+            const blockReason =
+              getConnectionBlockReason(
+                assessment,
+                t
+              );
+
+            const waitingPeriod =
+              getWaitingPeriodInformation(
+                assessment
+              );
+
+            const isAssigned =
+              assignedRequests.has(
+                requestId
+              );
+
+            const isAssigning =
+              assigningId === requestId;
+
+            return (
+              <div
+                key={requestId}
+                className={`p-4 border rounded-lg ${getStatusColor(
+                  req.status
+                )}`}
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <h4 className="font-bold">
+                      {req.fname}{" "}
+                      {req.fatherName}{" "}
+                      {req.lname}
+                    </h4>
+
+                    <p className="text-sm">
+                      {req.hospital}
+                    </p>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-2xl font-bold">
+                      {req.bloodType}
+                    </span>
+
+                    {req.bloodGenre && (
+                      <p className="text-xs capitalize">
+                        {t(req.bloodGenre)}
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <span className="text-2xl font-bold">{req.bloodType}</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-xs mb-2">
-                <div>{t("units")}: {req.unitsNeeded}</div>
-                <div>{t("date")}: {req.date}</div>
-                <div className="capitalize">{t(req.status)}</div>
-              </div>
-              {req.description && (
-                <p className="text-xs mb-3 italic">{req.description}</p>
-              )}
-              {user?.role === "donor" && req.status === "pending" && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => navigate(`/request-detail/${req._id}`)}
-                    className="flex-1 py-2 px-3 rounded-lg font-semibold text-sm transition flex items-center justify-center gap-2 bg-blue-500 text-white hover:bg-blue-600 active:scale-95"
-                  >
-                    <Eye size={16} />
-                    {language === "ar" ? "عرض" : "View"}
-                  </button>
-                  <>
-                    {user?.verifiedByAdmin && !isInCoolDown ? (
+
+                <div className="grid grid-cols-3 gap-2 text-xs mb-3">
+                  <div>
+                    {t("units")}:{" "}
+                    {req.unitsNeeded}
+                  </div>
+
+                  <div>
+                    {t("date")}:{" "}
+                    {req.date}
+                  </div>
+
+                  <div className="capitalize">
+                    {t(req.status)}
+                  </div>
+                </div>
+
+                {req.description && (
+                  <p className="text-xs mb-3 italic">
+                    {req.description}
+                  </p>
+                )}
+
+                {/* Request-specific waiting period */}
+                {waitingPeriod.active && (
+                  <div className="mb-3 flex items-start gap-3 rounded-lg border border-orange-200 bg-orange-50 p-3">
+                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-orange-600" />
+
+                    <div>
+                      <p className="text-sm font-semibold text-orange-800">
+                        {t(
+                          "waitingPeriodActive"
+                        )}
+                      </p>
+
+                      <p className="mt-1 text-sm text-orange-700">
+                        {t("timeRemaining")}:{" "}
+                        {
+                          waitingPeriod
+                            .remainingDays
+                        }{" "}
+                        {waitingPeriod
+                          .remainingDays === 1
+                          ? t("day")
+                          : t("days")}
+                      </p>
+
+                      <p className="mt-1 text-sm text-orange-700">
+                        {t(
+                          "canDonateAgainStarting"
+                        )}
+                        :{" "}
+                        {
+                          waitingPeriod
+                            .formattedNextEligibleDate
+                        }
+                      </p>
+
+                      <p className="mt-1 text-xs text-orange-700">
+                        {t(
+                          "cannotDonateDuringWaitingPeriod"
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Non-cooldown restriction */}
+                {!canDonate &&
+                  !waitingPeriod.active && (
+                    <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+
+                      <p className="text-xs text-amber-800">
+                        {blockReason}
+                      </p>
+                    </div>
+                  )}
+
+                {user?.role === "donor" &&
+                  req.status === "pending" && (
+                    <div className="flex gap-2">
                       <button
-                        onClick={() => !assignedRequests.has(req._id) && !assigningId && openUnitsModal(req)}
-                        disabled={assignedRequests.has(req._id) || assigningId === req._id}
-                        className={`flex-1 py-2 px-3 rounded-lg font-semibold text-sm transition flex items-center justify-center gap-2 ${assignedRequests.has(req._id)
+                        type="button"
+                        onClick={() =>
+                          navigate(
+                            `/request-detail/${requestId}`
+                          )
+                        }
+                        className="flex-1 py-2 px-3 rounded-lg font-semibold text-sm transition flex items-center justify-center gap-2 bg-blue-500 text-white hover:bg-blue-600 active:scale-95"
+                      >
+                        <Eye size={16} />
+                        {t("view")}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (
+                            canDonate &&
+                            !isAssigned &&
+                            !isAssigning
+                          ) {
+                            openUnitsModal(req);
+                          }
+                        }}
+                        disabled={
+                          !canDonate ||
+                          isAssigned ||
+                          isAssigning
+                        }
+                        title={
+                          canDonate
+                            ? t("donateNow")
+                            : blockReason
+                        }
+                        className={`flex-1 py-2 px-3 rounded-lg font-semibold text-sm transition flex items-center justify-center gap-2 ${isAssigned
                           ? "bg-green-500 text-white cursor-not-allowed"
-                          : assigningId === req._id
-                            ? "bg-blue-500 text-white opacity-70"
-                            : "bg-red-500 text-white hover:bg-red-600 active:scale-95"
+                          : isAssigning
+                            ? "bg-blue-500 text-white opacity-70 cursor-wait"
+                            : canDonate
+                              ? "bg-red-500 text-white hover:bg-red-600 active:scale-95"
+                              : "bg-gray-300 text-gray-600 cursor-not-allowed"
                           }`}
                       >
-                        {assignedRequests.has(req._id) ? (
+                        {isAssigned ? (
                           <>
                             <Check size={16} />
                             {t("assigned")}
                           </>
-                        ) : assigningId === req._id ? (
+                        ) : isAssigning ? (
                           <>
-                            <Loader size={16} className="animate-spin" />
+                            <Loader
+                              size={16}
+                              className="animate-spin"
+                            />
+
                             {t("assigning")}
                           </>
-                        ) : (
+                        ) : canDonate ? (
                           <>
                             <Heart size={16} />
                             {t("donateNow")}
                           </>
+                        ) : (
+                          <>
+                            <Lock size={16} />
+                            {t("donateNow")}
+                          </>
                         )}
                       </button>
-                    ) : (
-                      <button
-                        disabled
-                        className="flex-1 py-2 px-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 bg-gray-300 text-gray-600 cursor-not-allowed"
-                        title={language === "ar" ? (isInCoolDown ? "أنت في فترة الانتظار" : "تحقق من حسابك أولاً") : (isInCoolDown ? "You are in a waiting period" : "Verify your account first")}
-                      >
-                        <Lock size={16} />
-                        {t("donateNow")}
-                      </button>
-                    )}
-                  </>
-                </div>
-              )}
-            </div>
-          ))}
+                    </div>
+                  )}
+              </div>
+            );
+          })}
         </div>
       )}
 

@@ -37,6 +37,15 @@ const userSchema = new mongoose.Schema({
         type: String,
         required: function () { return this.role === 'donor'; }
     },
+    dateOfBirth: {
+        type: Date,
+        default: null
+    },
+    biologicalSex: {
+        type: String,
+        enum: ['male', 'female'],
+        required: false
+    },
     bloodType: {
         type: String,
         enum: ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'],

@@ -8,14 +8,16 @@ import { NotificationPermissionPrompt } from "./components/NotificationPermissio
 import { SessionExpirationModal } from "./components/SessionExpirationModal.jsx";
 import Routes from "./Routes/Routes.jsx";
 import { useSessionExpiration } from "./hooks/useSessionExpiration.js";
+import { ProfileCompletionModal } from "./components/ProfileCompletionModal.jsx";
 
 // Inner component that uses the useSessionExpiration hook
 function AppContent() {
   useSessionExpiration();
-  
+
   return (
     <>
       <SessionExpirationModal />
+      <ProfileCompletionModal />
       <Routes />
     </>
   );

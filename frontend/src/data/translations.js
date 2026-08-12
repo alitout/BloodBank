@@ -911,4 +911,304 @@ export const translations = {
     en: "Enable \"Keep Me Signed In\" to stay logged in for 30 days",
     ar: "فعّل \"إبقني مسجل الدخول\" للبقاء مسجل الدخول لمدة 30 يوم"
   },
+  dateOfBirth: {
+    en: "Date of Birth",
+    ar: "تاريخ الميلاد",
+  },
+
+  biologicalSex: {
+    en: "Biological Sex",
+    ar: "الجنس البيولوجي",
+  },
+
+  selectBiologicalSex: {
+    en: "Select",
+    ar: "اختر",
+  },
+
+  male: {
+    en: "Male",
+    ar: "ذكر",
+  },
+
+  female: {
+    en: "Female",
+    ar: "أنثى",
+  },
+
+  eligibilityInformationRequired: {
+    en: "Date of birth and biological sex are required to calculate donation-history limits.",
+    ar: "تاريخ الميلاد والجنس البيولوجي مطلوبان لحساب حدود سجل التبرع.",
+  },
+
+  completeRequiredInformation: {
+    en: "Complete Your Information",
+    ar: "استكمال معلوماتك",
+  },
+
+  completeRequiredInformationDescription: {
+    en: "Some required account information is missing.",
+    ar: "بعض معلومات الحساب المطلوبة غير مكتملة.",
+  },
+
+  profileCompletionApprovalNotice: {
+    en: "Submit the missing information to continue. The changes will be sent to the administrator for review.",
+    ar: "أدخل المعلومات الناقصة للمتابعة. سيتم إرسال التغييرات إلى المسؤول للمراجعة.",
+  },
+
+  requiredProfileInformationMissing: {
+    en: "Please complete all required fields.",
+    ar: "يرجى استكمال جميع الحقول المطلوبة.",
+  },
+
+  profileCompletionFailed: {
+    en: "Could not submit the required information.",
+    ar: "تعذر إرسال المعلومات المطلوبة.",
+  },
+
+  submitRequiredInformation: {
+    en: "Submit Information",
+    ar: "إرسال المعلومات",
+  },
+
+  submittingProfileInformation: {
+    en: "Submitting...",
+    ar: "جارٍ الإرسال...",
+  },
+
+  selectOption: {
+    en: "Select",
+    ar: "اختر",
+  },
+  accountVerification: {
+    en: "Account Verification",
+    ar: "توثيق الحساب",
+  },
+
+  profileChangesPending: {
+    en: "Profile Changes Pending Review",
+    ar: "تعديلات الملف بانتظار المراجعة",
+  },
+
+  profileChangesPendingDescription: {
+    en: "Your account remains verified. The submitted profile changes are waiting for administrator review.",
+    ar: "يبقى حسابك موثقاً، والتعديلات المرسلة على الملف الشخصي بانتظار مراجعة المسؤول.",
+  },
+
+  pendingFields: {
+    en: "Pending fields",
+    ar: "الحقول قيد المراجعة",
+  },
+
+  dateFormatHint: {
+    en: "Format: DD/MM/YYYY",
+    ar: "الصيغة: يوم/شهر/سنة",
+  },
+
+  invalidDateFormat: {
+    en: "Enter a valid date using DD/MM/YYYY.",
+    ar: "أدخل تاريخاً صحيحاً بالصيغة يوم/شهر/سنة.",
+  },
+
+  notProvided: {
+    en: "Not provided",
+    ar: "غير متوفر",
+  },
+
+
+  platformDonationAvailable: {
+    en: "You may respond to this donation request",
+    ar: "يمكنك الاستجابة لطلب التبرع هذا",
+  },
+
+  platformDonationUnavailable: {
+    en: "You cannot respond to this donation request currently",
+    ar: "لا يمكنك الاستجابة لطلب التبرع هذا حالياً",
+  },
+
+  notPlatformEligible: {
+    en: "You do not currently meet the platform requirements for this request.",
+    ar: "لا تستوفي حالياً متطلبات المنصة لهذا الطلب.",
+  },
+
+  eligibilityInformationUnavailable: {
+    en: "Eligibility information is unavailable. Refresh the page and try again.",
+    ar: "معلومات الأهلية غير متاحة. حدّث الصفحة وحاول مجدداً.",
+  },
+
+  eligibilityAccountNotVerified: {
+    en: "Your account must be verified by the administrator first.",
+    ar: "يجب توثيق حسابك من المسؤول أولاً.",
+  },
+
+  eligibilityAccountDeferred: {
+    en: "Your account is administratively restricted.",
+    ar: "يوجد تقييد إداري على حسابك.",
+  },
+
+  eligibilityProfileIncomplete: {
+    en: "Complete the required profile information first.",
+    ar: "أكمل معلومات الملف المطلوبة أولاً.",
+  },
+
+  eligibilityAgeOutOfRange: {
+    en: "Your age is outside the platform's 18–65 matching range.",
+    ar: "عمرك خارج نطاق المطابقة المعتمد في المنصة من 18 إلى 65 سنة.",
+  },
+
+  eligibilityBloodTypeIncompatible: {
+    en: "Your blood type is not a preliminary match for this request type.",
+    ar: "فئة دمك غير مطابقة أولياً لهذا النوع من الطلبات.",
+  },
+
+  eligibilityWholeBloodCooldown: {
+    en: "The whole-blood waiting period is still active.",
+    ar: "فترة الانتظار الخاصة بالدم الكامل ما زالت مستمرة.",
+  },
+
+  eligibilityWholeBloodAnnualLimit: {
+    en: "The rolling annual whole-blood limit has been reached.",
+    ar: "تم بلوغ الحد السنوي المتحرك لتبرعات الدم الكامل.",
+  },
+
+  eligibilityPlateletCooldown: {
+    en: "The 48-hour platelet waiting period is still active.",
+    ar: "فترة انتظار الصفائح الدموية البالغة 48 ساعة ما زالت مستمرة.",
+  },
+
+  eligibilityPlateletWeeklyLimit: {
+    en: "The rolling weekly platelet limit has been reached.",
+    ar: "تم بلوغ الحد الأسبوعي المتحرك لتبرعات الصفائح.",
+  },
+
+  eligibilityPlateletAnnualLimit: {
+    en: "The rolling annual platelet limit has been reached.",
+    ar: "تم بلوغ الحد السنوي المتحرك لتبرعات الصفائح.",
+  },
+
+  eligibilityRecentWholeBlood: {
+    en: "A recent whole-blood donation temporarily blocks this request type.",
+    ar: "يوجد تبرع حديث بالدم الكامل يمنع هذا النوع من الطلبات مؤقتاً.",
+  },
+
+  eligibilityPlasmaCooldown: {
+    en: "The plasma waiting period is still active.",
+    ar: "فترة الانتظار الخاصة بالبلازما ما زالت مستمرة.",
+  },
+
+  eligibilityInvalidDonationType: {
+    en: "This request has an unsupported donation type.",
+    ar: "نوع التبرع في هذا الطلب غير مدعوم.",
+  },
+
+
+  waitingPeriodActive: {
+    en: "Waiting Period Active",
+    ar: "فترة الانتظار نشطة",
+  },
+
+  timeRemaining: {
+    en: "Time remaining",
+    ar: "الوقت المتبقي",
+  },
+
+  day: {
+    en: "day",
+    ar: "يوم",
+  },
+
+  days: {
+    en: "days",
+    ar: "أيام",
+  },
+
+  canDonateAgainStarting: {
+    en: "You can donate again starting",
+    ar: "يمكنك التبرع مجدداً ابتداءً من",
+  },
+
+  cannotDonateDuringWaitingPeriod: {
+    en: "You cannot respond to this donation request until the waiting period ends.",
+    ar: "لا يمكنك الاستجابة لطلب التبرع هذا حتى انتهاء فترة الانتظار.",
+  },
+
+  donationCurrentlyUnavailable: {
+    en: "Donation Currently Unavailable",
+    ar: "التبرع غير متاح حالياً",
+  },
+
+  donationInformation: {
+    en: "Donation Information",
+    ar: "معلومات التبرع",
+  },
+
+  donationMatchingDisclaimer: {
+    en: "Matching is based on account verification, age, blood type, and recorded donation history. The hospital performs all medical tests and makes the final donation decision.",
+    ar: "تعتمد المطابقة على توثيق الحساب والعمر وفئة الدم وسجل التبرعات المسجل. يجري المستشفى جميع الفحوص الطبية ويتخذ القرار النهائي بشأن التبرع.",
+  },
+
+  donationAvailability: {
+    en: "Donation Availability",
+    ar: "إمكانية التبرع",
+  },
+
+  donationAvailabilityDescription: {
+    en: "Availability is calculated from your verified account information and recorded donation history.",
+    ar: "يتم حساب إمكانية التبرع اعتماداً على معلومات حسابك الموثقة وسجل التبرعات المسجل.",
+  },
+
+  availableBasedOnRecords: {
+    en: "Available based on recorded information",
+    ar: "متاح وفقاً للمعلومات المسجلة",
+  },
+
+  wholeBlood: {
+    en: "Whole Blood",
+    ar: "الدم الكامل",
+  },
+
+  platelets: {
+    en: "Platelets",
+    ar: "الصفائح الدموية",
+  },
+
+  plasma: {
+    en: "Plasma",
+    ar: "البلازما",
+  },
+
+  pendingReview: {
+    en: "Pending Review",
+    ar: "بانتظار المراجعة",
+  },
+
+  alreadyAssignedToRequest: {
+    en: "You are already assigned to this request.",
+    ar: "أنت مسجل مسبقاً لهذا الطلب.",
+  },
+
+  requestNoLongerActive: {
+    en: "This donation request is no longer active.",
+    ar: "طلب التبرع هذا لم يعد نشطاً.",
+  },
+
+  noUnitsRemaining: {
+    en: "No units remain available for this request.",
+    ar: "لم تعد هناك وحدات متاحة لهذا الطلب.",
+  },
+
+  selectedUnitsExceedAvailable: {
+    en: "The selected number of units exceeds the available units.",
+    ar: "عدد الوحدات المحدد أكبر من العدد المتاح.",
+  },
+
+  failedToAssignRequest: {
+    en: "Failed to register for this donation request.",
+    ar: "تعذر التسجيل لطلب التبرع هذا.",
+  },
+
+  platformEligibilityDisclaimer: {
+    en: "Platform eligibility is based only on account verification, age, blood type, and recorded donation history. The hospital performs all medical tests and makes the final donation decision.",
+    ar: "تعتمد أهلية المنصة فقط على توثيق الحساب والعمر وفئة الدم وسجل التبرعات المسجل. يجري المستشفى جميع الفحوص الطبية ويتخذ القرار النهائي بشأن التبرع.",
+  },
 };

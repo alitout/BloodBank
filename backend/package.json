@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node index.js",
-    "test": "node --test"
+    "test": "node --test",
+    "migration:report": "node scripts/reportProfileMigration.js",
+    "migration:donation-types": "node scripts/backfillDonationTypes.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

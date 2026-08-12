@@ -17,7 +17,6 @@ router.get('/all-donations', verifyAdminToken, RequestController.getAllDonations
 router.get('/:id', verifyDonorOrAdminToken, RequestController.getRequesterById);
 router.patch('/:id', verifyAccessToken, RequestController.updateRequester);
 router.patch('/:id/assign', verifyAdminToken, RequestController.assignRequestToDonor);
-router.post('/:id/match-donors', verifyAdminToken, RequestController.matchAndNotifyDonors);
 router.post('/:id/assign-self', verifyVerifiedDonorToken, RequestController.assignSelfToRequest);
 router.patch('/:id/cancel-assignment', verifyVerifiedDonorToken, RequestController.cancelAssignment);
 router.delete('/:id', verifyAccessToken, RequestController.deleteRequester);

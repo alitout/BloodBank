@@ -286,10 +286,13 @@ export const fetchAPI = async (
  */
 export const authAPI = {
   // Register new donor
-  registerDonor: (email, fname, lname, phone, password, passwordConfirmation, bloodType) =>
-    fetchAPI('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({ email, fname, lname, phone, password, passwordConfirmation, bloodType })
+  registerDonor: ({ email, fname, lname, phone, password, passwordConfirmation, bloodType, dateOfBirth, biologicalSex,
+  }) =>
+    fetchAPI("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({
+        email, fname, lname, phone, password, passwordConfirmation, bloodType, dateOfBirth, biologicalSex,
+      }),
     }),
 
   // Login user (email or phone + password)
@@ -321,11 +324,17 @@ export const authAPI = {
   getAllAccounts: () => fetchAPI('/auth/admin/accounts'),
 
   // Admin: Create donor
-  createDonorByAdmin: (email, fname, lname, phone, password, bloodType) =>
-    fetchAPI('/auth/admin/create-donor', {
-      method: 'POST',
-      body: JSON.stringify({ email, fname, lname, phone, password, bloodType })
-    }),
+  createDonorByAdmin: (donorData) =>
+    fetchAPI(
+      "/auth/admin/create-donor",
+      {
+        method: "POST",
+
+        body: JSON.stringify(
+          donorData
+        ),
+      }
+    ),
 
   // Admin: Create super admin
   createSuperAdminByAdmin: (email, phone, password, superAdminFName, superAdminLName) =>
@@ -349,7 +358,13 @@ export const authAPI = {
 
   // Admin: Get pending users
   getPendingUsers: () =>
-    fetchAPI('/auth/admin/pending')
+    fetchAPI('/auth/admin/pending'),
+
+  requestProfileUpdate: (changes) =>
+    fetchAPI("/auth/profile/update", {
+      method: "POST",
+      body: JSON.stringify(changes),
+    }),
 };
 
 /**

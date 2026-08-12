@@ -5,6 +5,7 @@ import { useDataCache } from "./DataCacheContext.jsx";
 import { API_BASE_URL, getAccessToken } from "../utils/api.js";
 import { Check, X, User, Trash2 } from "lucide-react";
 import { ConfigurableTable } from "./ConfigurableTable.jsx";
+import { formatDateDDMMYYYY, } from "../utils/dateFormat.js";
 
 export const AdminProfileRequestsTab = ({ pendingOnly = false }) => {
   const { t, language } = useLanguage();
@@ -19,11 +20,11 @@ export const AdminProfileRequestsTab = ({ pendingOnly = false }) => {
     fetchProfileRequests();
   }, []);
 
-  const fetchProfileRequests = async () => {
+  const fetchProfileRequests = async (forceRefresh = false) => {
     try {
       // Check cache first
       const cachedRequests = getCachedData(user?.role, 'profileRequests');
-      if (cachedRequests) {
+      if (cachedRequests && !forceRefresh) {
         setRequests(Array.isArray(cachedRequests) ? cachedRequests : []);
         setLoading(false);
         return;
@@ -51,6 +52,40 @@ export const AdminProfileRequestsTab = ({ pendingOnly = false }) => {
     }
   };
 
+  const handleRequestProcessed = async (requestId, status) => {
+    setRequests((currentRequests) =>
+      currentRequests.map((request) =>
+        (request._id || request.id) ===
+          requestId
+          ? {
+            ...request,
+            status,
+          }
+          : request
+      )
+    );
+
+    invalidateCache(
+      user?.role,
+      "profileRequests"
+    );
+
+    window.dispatchEvent(
+      new CustomEvent(
+        "admin-pending-updated",
+        {
+          detail: {
+            type: "profile_request",
+            requestId,
+            status,
+          },
+        }
+      )
+    );
+
+    await fetchProfileRequests(true);
+  };
+
   const handleApprove = async (requestId) => {
     setActionLoading(true);
     try {
@@ -67,7 +102,11 @@ export const AdminProfileRequestsTab = ({ pendingOnly = false }) => {
 
       if (!response.ok) throw new Error("Failed to approve request");
       setError("");
-      fetchProfileRequests();
+
+      await handleRequestProcessed(
+        requestId,
+        "approved"
+      );
 
       window.dispatchEvent(
         new CustomEvent("admin-pending-updated")
@@ -132,6 +171,11 @@ export const AdminProfileRequestsTab = ({ pendingOnly = false }) => {
       }
 
       setError("");
+
+      await handleRequestProcessed(
+        requestId,
+        "rejected"
+      );
       invalidateCache(user?.role, "profileRequests");
       await fetchProfileRequests();
 
@@ -166,6 +210,37 @@ export const AdminProfileRequestsTab = ({ pendingOnly = false }) => {
     }
   };
 
+  const getProfileFieldLabel = (
+    field
+  ) => {
+    const translatedLabel =
+      t(field);
+
+    return translatedLabel === field
+      ? field
+      : translatedLabel;
+  };
+
+  const formatProfileChangeValue = (
+    field,
+    value
+  ) => {
+    if (field === "dateOfBirth") {
+      return (
+        formatDateDDMMYYYY(value) ||
+        t("notProvided")
+      );
+    }
+
+    if (
+      field === "biologicalSex"
+    ) {
+      return t(value);
+    }
+
+    return String(value ?? "");
+  };
+
   const columns = [
     {
       key: "email",
@@ -191,10 +266,25 @@ export const AdminProfileRequestsTab = ({ pendingOnly = false }) => {
           );
         }
         return (
-          <div className="text-sm">
-            {Object.keys(changes || {})
-              .map((key) => `${key}: ${changes[key]}`)
-              .join(", ")}
+          <div className="space-y-1 text-sm">
+            {Object.entries(
+              changes || {}
+            ).map(([field, value]) => (
+              <div key={field}>
+                <span className="font-semibold">
+                  {getProfileFieldLabel(
+                    field
+                  )}
+                  :
+                </span>{" "}
+                <span>
+                  {formatProfileChangeValue(
+                    field,
+                    value
+                  )}
+                </span>
+              </div>
+            ))}
           </div>
         );
       },
@@ -212,8 +302,9 @@ export const AdminProfileRequestsTab = ({ pendingOnly = false }) => {
     {
       key: "createdAt",
       label: t("date"),
-      visible: false,
-      render: (date) => new Date(date).toLocaleDateString(),
+      visible: true,
+      render: (date) =>
+        formatDateDDMMYYYY(date),
     },
   ];
 

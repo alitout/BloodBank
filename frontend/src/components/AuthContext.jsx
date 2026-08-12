@@ -434,26 +434,13 @@ export const AuthProvider = ({ children, }) => {
       }
     };
 
-  const register = async (
-    email,
-    fname,
-    lname,
-    phone,
-    password,
-    passwordConfirmation,
-    bloodType
-  ) => {
+  const register = async ({
+    email, fname, lname, phone, password, passwordConfirmation, bloodType, dateOfBirth, biologicalSex,
+  }) => {
     try {
       setError(null);
 
-      if (
-        !email ||
-        !fname ||
-        !lname ||
-        !phone ||
-        !password ||
-        !passwordConfirmation
-      ) {
+      if (!email || !fname || !lname || !phone || !password || !passwordConfirmation || !bloodType || !dateOfBirth || !biologicalSex) {
         const message =
           "All fields are required";
 
@@ -466,17 +453,17 @@ export const AuthProvider = ({ children, }) => {
       }
 
       const result =
-        await authAPI.registerDonor(
-          email
-            .trim()
-            .toLowerCase(),
-          fname.trim(),
-          lname.trim(),
-          phone.trim(),
+        await authAPI.registerDonor({
+          email: email.trim().toLowerCase(),
+          fname: fname.trim(),
+          lname: lname.trim(),
+          phone: phone.trim(),
           password,
           passwordConfirmation,
-          bloodType
-        );
+          bloodType,
+          dateOfBirth,
+          biologicalSex,
+        });
 
       if (
         !result.success ||

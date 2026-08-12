@@ -169,10 +169,25 @@ export const NotificationBell = ({ isMobilePanel = false, }) => {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [
-    accessToken,
-    fetchPendingData,
-  ]);
+  }, [accessToken, fetchPendingData,]);
+
+  useEffect(() => {
+    const handlePendingUpdate = () => {
+      fetchPendingData();
+    };
+
+    window.addEventListener(
+      "admin-pending-updated",
+      handlePendingUpdate
+    );
+
+    return () => {
+      window.removeEventListener(
+        "admin-pending-updated",
+        handlePendingUpdate
+      );
+    };
+  }, [fetchPendingData]);
 
   useEffect(() => {
     if (isMobilePanel) {

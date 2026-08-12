@@ -24,6 +24,13 @@ const donationSchema = new mongoose.Schema(
       index: true,
     },
 
+    donationType: {
+      type: String,
+      enum: ["whole_blood", "platelets", "plasma"],
+      required: true,
+      index: true,
+    },
+
     // Number of units assigned to this donor
     unitsAssigned: {
       type: Number,
@@ -113,5 +120,11 @@ donationSchema.index(
   { donorUid: 1, requestId: 1 },
   { unique: true }
 );
+
+donationSchema.index({
+  donorUid: 1,
+  status: 1,
+  donationDate: -1,
+});
 
 export default mongoose.model('Donation', donationSchema);

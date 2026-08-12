@@ -17,6 +17,8 @@ export const RegisterPane = ({ onSuccess }) => {
     const [password, setPassword] = useState("");
     const [passwordConfirmation, setPasswordConfirmation] = useState("");
     const [bloodType, setBloodType] = useState("O+");
+    const [dateOfBirth, setDateOfBirth] = useState("");
+    const [biologicalSex, setBiologicalSex] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
@@ -55,7 +57,15 @@ export const RegisterPane = ({ onSuccess }) => {
                 return;
             }
 
-            const result = await register(
+            if (!dateOfBirth || !biologicalSex) {
+                setErrorMsg(
+                    t("eligibilityInformationRequired")
+                );
+                setIsSubmitting(false);
+                return;
+            }
+
+            const result = await register({
                 email,
                 fname,
                 lname,
@@ -63,13 +73,15 @@ export const RegisterPane = ({ onSuccess }) => {
                 password,
                 passwordConfirmation,
                 bloodType,
-            );
+                dateOfBirth,
+                biologicalSex,
+            });
 
             if (result.success) {
                 setSuccessMsg(t("registrationSuccessful"));
                 setTimeout(() => {
-                  if (onSuccess) onSuccess();
-                  navigate("/dashboard");
+                    if (onSuccess) onSuccess();
+                    navigate("/dashboard");
                 }, 1500);
             } else {
                 setErrorMsg(result.message);
@@ -185,6 +197,51 @@ export const RegisterPane = ({ onSuccess }) => {
                                 required
                             />
                         </div>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5 tracking-wider">
+                            {t("dateOfBirth")}
+                        </label>
+
+                        <input
+                            type="date"
+                            value={dateOfBirth}
+                            onChange={(event) =>
+                                setDateOfBirth(event.target.value)
+                            }
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs py-2.5 px-3 font-semibold text-slate-800 focus:outline-none focus:border-red-600 transition-colors"
+                            required
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5 tracking-wider">
+                            {t("biologicalSex")}
+                        </label>
+
+                        <select
+                            value={biologicalSex}
+                            onChange={(event) =>
+                                setBiologicalSex(event.target.value)
+                            }
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs py-2.5 px-3 font-semibold text-slate-800 focus:outline-none focus:border-red-600 transition-colors"
+                            required
+                        >
+                            <option value="">
+                                {t("selectBiologicalSex")}
+                            </option>
+
+                            <option value="male">
+                                {t("male")}
+                            </option>
+
+                            <option value="female">
+                                {t("female")}
+                            </option>
+                        </select>
                     </div>
                 </div>
 

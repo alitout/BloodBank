@@ -2,6 +2,7 @@ import Donation from "../../models/Donation.js";
 import Request from "../../models/Requests.js";
 import User from "../../models/User.js";
 import { Notification } from "../../models/Notification.js";
+import { buildEligibilitySummary, getApprovedDonationHistory } from "../../services/donorEligibilityService.js";
 
 const generateDonationId = () =>
     `donation - ${Date.now()} -${Math.random()
@@ -69,17 +70,6 @@ const createDonation = async (
             });
         }
 
-        if (
-            donor.status !== "eligible"
-        ) {
-            return res.status(403).json({
-                error:
-                    "You are not currently eligible to donate",
-                code:
-                    "DONOR_NOT_ELIGIBLE",
-            });
-        }
-
         const request =
             await Request.findById(
                 requestId
@@ -140,82 +130,47 @@ const createDonation = async (
              * opened again for resubmission.
              */
             if (
-                existingDonation.status ===
-                "rejected"
+                existingDonation.status === "rejected"
             ) {
-                existingDonation.status =
-                    "pending_confirmation";
-
-                existingDonation.unitsAssigned =
-                    donorAssignment.unitsAssigned;
-
-                existingDonation.unitsCompleted =
-                    0;
-
-                existingDonation.rejectionReason =
-                    null;
-
-                existingDonation.rejectedAt =
-                    null;
-
-                existingDonation.rejectedBy =
-                    null;
-
-                existingDonation.donorCompletedAt =
-                    null;
-
-                existingDonation.adminApprovedAt =
-                    null;
-
-                existingDonation.adminApprovedBy =
-                    null;
-
-                existingDonation.donationDate =
-                    null;
-
-                existingDonation.updatedAt =
-                    new Date();
-
+                existingDonation.status = "pending_confirmation";
+                existingDonation.unitsAssigned = donorAssignment.unitsAssigned;
+                existingDonation.unitsCompleted = 0;
+                existingDonation.rejectionReason = null;
+                existingDonation.rejectedAt = null;
+                existingDonation.rejectedBy = null;
+                existingDonation.donorCompletedAt = null;
+                existingDonation.adminApprovedAt = null;
+                existingDonation.adminApprovedBy = null;
+                existingDonation.donationDate = null;
+                existingDonation.updatedAt = new Date();
+                existingDonation.donationType = request.bloodGenre;
                 await existingDonation.save();
 
                 return res.json({
-                    message:
-                        "Donation record reopened",
-                    donation:
-                        existingDonation,
+                    message: "Donation record reopened",
+                    donation: existingDonation,
                 });
             }
 
             return res.status(409).json({
-                error:
-                    "Donation record already exists",
-                donation:
-                    existingDonation,
+                error: "Donation record already exists",
+                donation: existingDonation,
             });
         }
 
         const donation =
             await Donation.create({
-                donationId:
-                    generateDonationId(),
-
+                donationId: generateDonationId(),
                 donorUid,
-
-                requestId:
-                    request._id,
-
-                unitsAssigned:
-                    donorAssignment.unitsAssigned,
-
+                requestId: request._id,
+                donationType: request.bloodGenre,
+                unitsAssigned: donorAssignment.unitsAssigned,
                 unitsCompleted: 0,
-
-                status:
-                    "pending_confirmation",
+                status: "pending_confirmation",
             });
 
         res.status(201).json({
-            message:
-                "Donation record created successfully",
+            message: "Donation record created successfully",
             donation,
         });
     } catch (error) {
@@ -225,8 +180,7 @@ const createDonation = async (
         );
 
         res.status(500).json({
-            error:
-                "Failed to create donation record",
+            error: "Failed to create donation record",
         });
     }
 };
@@ -587,31 +541,22 @@ const getPendingDonations =
 /*
  * Admin approves a donation confirmation.
  */
-const approveDonation = async (
-    req,
-    res
-) => {
+const approveDonation = async (req, res) => {
     const session =
         await Donation.startSession();
 
     try {
-        const adminUid =
-            req.user?.uid;
-
-        const { donationId } =
-            req.params;
+        const adminUid = req.user?.uid;
+        const { donationId } = req.params;
 
         if (!adminUid) {
             return res.status(401).json({
-                error:
-                    "Authentication required",
+                error: "Authentication required",
             });
         }
-
         if (!donationId) {
             return res.status(400).json({
-                error:
-                    "Donation ID is required",
+                error: "Donation ID is required",
             });
         }
 
@@ -632,8 +577,7 @@ const approveDonation = async (
                 }
 
                 if (
-                    donation.status ===
-                    "approved"
+                    donation.status === "approved"
                 ) {
                     throw createHttpError(
                         409,
@@ -642,8 +586,7 @@ const approveDonation = async (
                 }
 
                 if (
-                    donation.status !==
-                    "pending_admin_approval"
+                    donation.status !== "pending_admin_approval"
                 ) {
                     throw createHttpError(
                         400,
@@ -653,8 +596,7 @@ const approveDonation = async (
 
                 const donor =
                     await User.findOne({
-                        uid:
-                            donation.donorUid,
+                        uid: donation.donorUid,
                         role: "donor",
                     }).session(session);
 
@@ -701,24 +643,13 @@ const approveDonation = async (
                     );
                 }
 
-                const approvedAt =
-                    new Date();
-
-                donation.status =
-                    "approved";
-
-                donation.adminApprovedAt =
-                    approvedAt;
-
-                donation.adminApprovedBy =
-                    adminUid;
-
-                donation.donationDate =
-                    approvedAt;
-
-                donation.updatedAt =
-                    approvedAt;
-
+                const approvedAt = new Date();
+                donation.status = "approved";
+                donation.adminApprovedAt = approvedAt;
+                donation.adminApprovedBy = adminUid;
+                donation.donationDate = approvedAt;
+                donation.updatedAt = approvedAt;
+                donation.donationType = donation.donationType || request.bloodGenre;
                 await donation.save({
                     session,
                 });
@@ -758,31 +689,53 @@ const approveDonation = async (
                     session,
                 });
 
-                const nextEligibleDate =
-                    new Date(approvedAt);
+                const approvedDonationCount =
+                    await Donation.countDocuments({
+                        donorUid: donor.uid,
+                        status: "approved",
+                    }).session(session);
 
-                nextEligibleDate.setDate(
-                    nextEligibleDate.getDate() +
-                    56
-                );
+                const approvedHistory =
+                    await getApprovedDonationHistory(
+                        donor.uid,
+                        {
+                            session,
+                        }
+                    );
+
+                const eligibilityByType =
+                    buildEligibilitySummary({
+                        donor,
+                        donations:
+                            approvedHistory,
+                        referenceDate:
+                            approvedAt,
+                    });
+
+                const wholeBloodEligibility =
+                    eligibilityByType.whole_blood;
 
                 donor.donationCount =
-                    Number(
-                        donor.donationCount || 0
-                    ) +
-                    Number(
-                        donation.unitsCompleted ||
-                        0
-                    );
+                    approvedDonationCount;
 
                 donor.lastDonationDate =
                     approvedAt;
 
-                donor.nextEligibleDate =
-                    nextEligibleDate;
+                if (donor.status !== "deferred") {
+                    donor.status =
+                        wholeBloodEligibility.eligible
+                            ? "eligible"
+                            : "cool-down";
+                }
 
-                donor.status =
-                    "cool-down";
+                donor.nextEligibleDate =
+                    wholeBloodEligibility
+                        .nextEligibleDate
+                        ? new Date(
+                            wholeBloodEligibility
+                                .nextEligibleDate
+                        )
+                        : null;
 
                 donor.updatedAt =
                     approvedAt;
@@ -845,11 +798,11 @@ const approveDonation = async (
 
                             type: "donation_approved",
 
-                            title: "Donation Approved",
+                            title: "Donation Record Confirmed",
 
                             message:
-                                `Your donation of ${donation.unitsCompleted} unit(s) was approved. ` +
-                                `You can donate again after ${nextEligibleDate.toLocaleDateString()}.`,
+                                `Your donation record for ${request.bloodGenre} was confirmed. ` +
+                                `Your platform eligibility has been recalculated. `,
 
                             read: false,
 
@@ -870,31 +823,21 @@ const approveDonation = async (
 
                     donor: {
                         uid: donor.uid,
-                        fname:
-                            donor.fname,
-                        lname:
-                            donor.lname,
-                        bloodType:
-                            donor.bloodType,
-                        donationCount:
-                            donor.donationCount,
-                        lastDonationDate:
-                            donor.lastDonationDate,
-                        nextEligibleDate:
-                            donor.nextEligibleDate,
-                        status:
-                            donor.status,
+                        fname: donor.fname,
+                        lname: donor.lname,
+                        bloodType: donor.bloodType,
+                        donationCount: donor.donationCount,
+                        lastDonationDate: donor.lastDonationDate,
+                        nextEligibleDate: donor.nextEligibleDate,
+                        status: donor.status,
+                        eligibilityByType,
                     },
 
                     request: {
-                        id:
-                            request.id,
-                        _id:
-                            request._id,
-                        status:
-                            request.status,
-                        unitsNeeded:
-                            request.unitsNeeded,
+                        id: request.id,
+                        _id: request._id,
+                        status: request.status,
+                        unitsNeeded: request.unitsNeeded,
                         totalCompleted,
                     },
                 };

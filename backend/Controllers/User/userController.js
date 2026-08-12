@@ -4,6 +4,29 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { env } from '../../config/env.js';
 import { sanitizeEmail, sanitizePhone, sanitizeName, sanitizeInput, sanitizeBloodType, validatePasswordStrength } from '../../middleware/securityMiddleware.js';
+import { validateDateOfBirth } from "../../utils/dateOfBirth.js";
+import { getDonorEligibilitySummary } from "../../services/donorEligibilityService.js";
+import { getProfileCompletionStatus } from "../../services/profileCompletionService.js";
+
+const VALID_BIOLOGICAL_SEX_VALUES = [
+  "male",
+  "female",
+];
+
+const normalizeBiologicalSex = (value) => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalizedValue =
+    value.trim().toLowerCase();
+
+  return VALID_BIOLOGICAL_SEX_VALUES.includes(
+    normalizedValue
+  )
+    ? normalizedValue
+    : null;
+};
 
 const generateAccessToken = (user) => {
   return jwt.sign(
@@ -81,11 +104,14 @@ const getAllAccounts = async (req, res) => {
 
 const registerDonor = async (req, res) => {
   try {
-    const { email, fname, lname, phone, bloodType, password, passwordConfirmation } = req.body;
+    const { email, fname, lname, phone, bloodType, dateOfBirth, biologicalSex, password, passwordConfirmation } = req.body;
 
     // ✅ VALIDATION: Check all required fields
-    if (!email || !fname || !lname || !phone || !bloodType || !password || !passwordConfirmation) {
-      return res.status(400).json({ error: 'All fields are required' });
+    if (!email || !fname || !lname || !phone || !bloodType || !dateOfBirth || !biologicalSex || !password || !passwordConfirmation) {
+      return res.status(400).json({
+        error: "All required fields must be provided",
+        code: "REQUIRED_FIELDS_MISSING",
+      });
     }
 
     // ✅ VALIDATION: Passwords match
@@ -98,6 +124,27 @@ const registerDonor = async (req, res) => {
       validatePasswordStrength(password);
     } catch (err) {
       return res.status(400).json({ error: err.message });
+    }
+
+    const dateOfBirthValidation =
+      validateDateOfBirth(dateOfBirth);
+
+    if (!dateOfBirthValidation.valid) {
+      return res.status(400).json({
+        error: dateOfBirthValidation.error,
+        code: dateOfBirthValidation.code,
+      });
+    }
+
+    const normalizedBiologicalSex =
+      normalizeBiologicalSex(biologicalSex);
+
+    if (!normalizedBiologicalSex) {
+      return res.status(400).json({
+        error:
+          "Biological sex must be male or female",
+        code: "INVALID_BIOLOGICAL_SEX",
+      });
     }
 
     // ✅ SANITIZATION: Email, phone, names
@@ -136,6 +183,8 @@ const registerDonor = async (req, res) => {
       password: hashedPassword,
       role: 'donor',
       bloodType: sanitizedBloodType,
+      dateOfBirth: dateOfBirthValidation.date,
+      biologicalSex: normalizedBiologicalSex,
       verifiedByAdmin: false,
       createdAt: new Date()
     });
@@ -163,6 +212,8 @@ const registerDonor = async (req, res) => {
         role: newUser.role,
         phone: newUser.phone,
         bloodType: newUser.bloodType,
+        dateOfBirth: newUser.dateOfBirth,
+        biologicalSex: newUser.biologicalSex,
         verifiedByAdmin: false
       },
       accessToken,
@@ -253,6 +304,8 @@ const loginUser = async (req, res) => {
       userResponse.fname = user.fname;
       userResponse.lname = user.lname;
       userResponse.bloodType = user.bloodType;
+      userResponse.dateOfBirth = user.dateOfBirth || null;
+      userResponse.biologicalSex = user.biologicalSex || null;
       userResponse.status = user.status;
       userResponse.donationCount = user.donationCount || 0;
       userResponse.lastDonationDate = user.lastDonationDate || null;
@@ -261,6 +314,10 @@ const loginUser = async (req, res) => {
       userResponse.fname = user.superAdminFName;
       userResponse.lname = user.superAdminLName;
     }
+    userResponse.profileCompletion =
+      await getProfileCompletionStatus(
+        user
+      );
 
     res.json({
       message: 'Login successful',
@@ -427,6 +484,8 @@ const createDonorByAdmin = async (req, res) => {
       password: hashedPassword,
       role: 'donor',
       bloodType: sanitizedBloodType,
+      dateOfBirth: dateOfBirthValidation.date,
+      biologicalSex: normalizedBiologicalSex,
       verifiedByAdmin: true,
       createdBy: adminuid,
       createdAt: new Date()
@@ -447,6 +506,8 @@ const createDonorByAdmin = async (req, res) => {
         role: newDonor.role,
         phone: newDonor.phone,
         bloodType: newDonor.bloodType,
+        dateOfBirth: newDonor.dateOfBirth,
+        biologicalSex: newDonor.biologicalSex,
       }
     });
   } catch (error) {
@@ -792,7 +853,7 @@ const getCurrentUser = async (req, res) => {
     const user = await User.findOne({
       uid,
     }).select(
-      "-password -refreshToken -refreshTokenHash"
+      "-password -refreshTokenHash"
     );
 
     if (!user) {
@@ -801,104 +862,63 @@ const getCurrentUser = async (req, res) => {
       });
     }
 
-    /*
-     * Repair donor cooldown status.
-     */
+    let eligibilityByType = null;
+
+    const profileCompletion =
+      await getProfileCompletionStatus(
+        user
+      );
+
     if (user.role === "donor") {
-      const now = new Date();
-
-      const nextEligibleDate =
-        user.nextEligibleDate
-          ? new Date(user.nextEligibleDate)
-          : null;
-
-      const hasValidNextEligibleDate =
-        nextEligibleDate &&
-        !Number.isNaN(
-          nextEligibleDate.getTime()
-        );
-
-      /*
-       * Cooldown expired:
-       * restore eligibility.
-       */
-      if (
-        user.status === "cool-down" &&
-        hasValidNextEligibleDate &&
-        now >= nextEligibleDate
-      ) {
-        user.status = "eligible";
-        user.nextEligibleDate = null;
-        user.updatedAt = now;
-
-        await user.save();
-      }
-
-      /*
-       * Invalid state:
-       * status says cooldown but there is no valid date.
-       *
-       * Restore eligibility instead of leaving the
-       * donor permanently blocked.
-       */
-      if (
-        user.status === "cool-down" &&
-        !hasValidNextEligibleDate
-      ) {
-        console.warn(
-          `[AUTH] Repairing invalid cooldown for donor ${user.uid}: missing or invalid nextEligibleDate`
-        );
-
-        user.status = "eligible";
-        user.nextEligibleDate = null;
-        user.updatedAt = now;
-
-        await user.save();
-      }
+      eligibilityByType =
+        await getDonorEligibilitySummary(user);
     }
 
-    console.log(
-      "[AUTH] Current user profile:",
-      {
-        uid: user.uid,
-        status: user.status,
-        lastDonationDate:
-          user.lastDonationDate,
-        nextEligibleDate:
-          user.nextEligibleDate,
-        donationCount:
-          user.donationCount,
-      }
-    );
+    const userResponse = {
+      uid: user.uid,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      verifiedByAdmin: Boolean(user.verifiedByAdmin),
+      profileCompletion,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
 
-    res.json({
-      user: {
-        uid: user.uid,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-
+    if (user.role === "donor") {
+      Object.assign(userResponse, {
         fname: user.fname,
         lname: user.lname,
         bloodType: user.bloodType,
 
+        dateOfBirth: user.dateOfBirth || null,
+        biologicalSex: user.biologicalSex || null,
+        eligibilityByType,
         status: user.status,
+        donationCount: user.donationCount || 0,
+        lastDonationDate: user.lastDonationDate || null,
+        nextEligibleDate: user.nextEligibleDate || null,
+      });
+    }
 
-        donationCount:
-          user.donationCount || 0,
+    if (user.role === "super_admin") {
+      Object.assign(userResponse, {
+        fname: user.superAdminFName,
+        lname: user.superAdminLName,
+      });
+    }
 
-        lastDonationDate:
-          user.lastDonationDate || null,
+    if (user.role === "hospital") {
+      Object.assign(userResponse, {
+        hospitalName: user.hospitalName,
+        hospitalContactName: user.hospitalContactName,
+        hospitalContactTitle: user.hospitalContactTitle,
+        hospitalAddress: user.hospitalAddress,
+      });
+    }
 
-        nextEligibleDate:
-          user.nextEligibleDate || null,
-
-        verifiedByAdmin:
-          Boolean(user.verifiedByAdmin),
-
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-      },
+    return res.json({
+      user: userResponse,
     });
   } catch (error) {
     console.error(
@@ -906,7 +926,7 @@ const getCurrentUser = async (req, res) => {
       error
     );
 
-    res.status(500).json({
+    return res.status(500).json({
       error:
         "Failed to fetch current user profile",
     });

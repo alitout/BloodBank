@@ -1,40 +1,130 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useLanguage } from "../components/LanguageContext.jsx";
 import { useAuth } from "../components/AuthContext.jsx";
 import { API_BASE_URL } from "../utils/api.js";
 import { Heart, Droplet, CheckCircle, Edit2, Trash2, X } from "lucide-react";
+import { formatDateDDMMYYYY, parseDDMMYYYYToISO, } from "../utils/dateFormat.js";
+import { getConnectionBlockReason, getWaitingPeriodInformation, } from "../utils/connectionAssessment.js";
 
 export const DonorProfilePage = () => {
   const { t, language } = useLanguage();
   const { user, accessToken } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({
-    fname: user?.fname || "",
-    lname: user?.lname || "",
-    phone: user?.phone || "",
-    bloodType: user?.bloodType || "O+",
-    email: user?.email || "",
-  });
+  const [editForm, setEditForm] =
+    useState({
+      fname: user?.fname || "",
+      lname: user?.lname || "",
+      phone: user?.phone || "",
+      bloodType: user?.bloodType || "O+",
+      email: user?.email || "",
+      dateOfBirth:
+        formatDateDDMMYYYY(
+          user?.dateOfBirth
+        ),
+
+      biologicalSex: user?.biologicalSex || "",
+    });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteReason, setDeleteReason] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  const profileChangePending = user?.profileCompletion?.submissionPending === true;
+
+  useEffect(() => {
+    if (!user || isEditing) {
+      return;
+    }
+
+    setEditForm({
+      fname: user.fname || "",
+      lname: user.lname || "",
+      phone: user.phone || "",
+      bloodType: user.bloodType || "O+",
+      email: user.email || "",
+
+      dateOfBirth:
+        formatDateDDMMYYYY(
+          user.dateOfBirth
+        ),
+
+      biologicalSex:
+        user.biologicalSex || "",
+    });
+  }, [user, isEditing]);
+
   const bloodTypes = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
-  const getStatusBadgeColor = (status) => {
-    switch (status) {
-      case "eligible":
-        return "bg-green-100 text-green-800";
-      case "cool-down":
-        return "bg-yellow-100 text-yellow-800";
-      case "deferred":
-        return "bg-red-100 text-red-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
+  // const getStatusBadgeColor = (status) => {
+  //   switch (status) {
+  //     case "eligible":
+  //       return "bg-green-100 text-green-800";
+  //     case "cool-down":
+  //       return "bg-yellow-100 text-yellow-800";
+  //     case "deferred":
+  //       return "bg-red-100 text-red-800";
+  //     default:
+  //       return "bg-gray-100 text-gray-800";
+  //   }
+  // };
+
+  const donationTypes = [
+    {
+      key: "whole_blood",
+      labelKey: "wholeBlood",
+    },
+    {
+      key: "platelets",
+      labelKey: "platelets",
+    },
+    {
+      key: "plasma",
+      labelKey: "plasma",
+    },
+  ];
+
+  const donationAvailability =
+    donationTypes.map((type) => {
+      const eligibility =
+        user?.eligibilityByType?.[
+        type.key
+        ];
+
+      /*
+       * Reuse the request-assessment display helpers.
+       * The backend eligibility summary uses `eligible`,
+       * while request assessments use `platformEligible`.
+       */
+      const displayAssessment =
+        eligibility
+          ? {
+            ...eligibility,
+
+            platformEligible:
+              eligibility.eligible,
+          }
+          : null;
+
+      return {
+        ...type,
+        eligibility,
+
+        available:
+          eligibility?.eligible === true,
+
+        waitingPeriod:
+          getWaitingPeriodInformation(
+            displayAssessment
+          ),
+
+        reason:
+          getConnectionBlockReason(
+            displayAssessment,
+            t
+          ),
+      };
+    });
 
   const handleEditChange = (e) => {
     const { name, value } = e.target;
@@ -45,6 +135,17 @@ export const DonorProfilePage = () => {
     setIsLoading(true);
     setError("");
     setSuccess("");
+
+    const isoDateOfBirth =
+      parseDDMMYYYYToISO(
+        editForm.dateOfBirth
+      );
+
+    if (!isoDateOfBirth) {
+      setError(t("invalidDateFormat"));
+      setIsLoading(false);
+      return;
+    }
 
     try {
       const response = await fetch(`${API_BASE_URL}/auth/profile/update`, {
@@ -58,6 +159,8 @@ export const DonorProfilePage = () => {
           lname: editForm.lname,
           phone: editForm.phone,
           bloodType: editForm.bloodType,
+          dateOfBirth: isoDateOfBirth,
+          biologicalSex: editForm.biologicalSex,
         }),
       });
 
@@ -72,9 +175,6 @@ export const DonorProfilePage = () => {
           : "✓ Profile update request submitted successfully. Admin will verify and apply the changes."
       );
       setIsEditing(false);
-
-      // Refresh profile data and mark as not verified
-      // You may want to call a function to refresh user data from context
 
       setTimeout(() => {
         setSuccess("");
@@ -143,14 +243,80 @@ export const DonorProfilePage = () => {
                 </p>
               </div>
             </div>
-            <button
+            {/* <button
               onClick={() => setIsEditing(!isEditing)}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"
             >
               <Edit2 className="w-4 h-4" />
               {isEditing ? (language === "ar" ? "إلغاء" : "Cancel") : (language === "ar" ? "تعديل" : "Edit")}
+            </button> */}
+            <button
+              type="button"
+              onClick={() => {
+                if (!profileChangePending) {
+                  setIsEditing(
+                    (current) => !current
+                  );
+                }
+              }}
+              disabled={profileChangePending}
+              title={
+                profileChangePending
+                  ? t(
+                    "profileChangesPendingDescription"
+                  )
+                  : t("edit")
+              }
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 disabled:bg-slate-300 disabled:text-slate-600 disabled:cursor-not-allowed"
+            >
+              <Edit2 className="w-4 h-4" />
+
+              {profileChangePending
+                ? t("pendingReview")
+                : isEditing
+                  ? t("cancel")
+                  : t("edit")}
             </button>
           </div>
+        </div>
+
+        <div className="mb-4">
+          {user?.profileCompletion
+            ?.submissionPending && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <CheckCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+
+                  <div>
+                    <p className="font-semibold text-amber-900">
+                      {t(
+                        "profileChangesPending"
+                      )}
+                    </p>
+
+                    <p className="text-sm text-amber-800 mt-1">
+                      {t(
+                        "profileChangesPendingDescription"
+                      )}
+                    </p>
+
+                    {user.profileCompletion
+                      .pendingFields?.length >
+                      0 && (
+                        <p className="text-xs text-amber-700 mt-2">
+                          {t("pendingFields")}:{" "}
+                          {user.profileCompletion
+                            .pendingFields
+                            .map((field) =>
+                              t(field)
+                            )
+                            .join(", ")}
+                        </p>
+                      )}
+                  </div>
+                </div>
+              </div>
+            )}
         </div>
 
         {/* Error/Success Messages */}
@@ -169,7 +335,7 @@ export const DonorProfilePage = () => {
         {!isEditing ? (
           <div className="space-y-6">
             {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Blood Type */}
               <div className="bg-white rounded-lg p-4 border border-slate-200">
                 <div className="flex items-center gap-3">
@@ -183,28 +349,13 @@ export const DonorProfilePage = () => {
                 </div>
               </div>
 
-              {/* Status */}
-              <div className="bg-white rounded-lg p-4 border border-slate-200">
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="w-8 h-8 text-blue-600" />
-                  <div>
-                    <p className="text-sm text-slate-600">
-                      {language === "ar" ? "الحالة" : "Status"}
-                    </p>
-                    <div className={`text-sm font-bold py-1 px-2 rounded-full inline-block mt-1 ${getStatusBadgeColor(user?.status)}`}>
-                      {user?.status?.toUpperCase()}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               {/* Verification Status */}
               <div className="bg-white rounded-lg p-4 border border-slate-200">
                 <div className="flex items-center gap-3">
                   <CheckCircle className={`w-8 h-8 ${user?.verifiedByAdmin ? "text-green-600" : "text-yellow-600"}`} />
                   <div>
                     <p className="text-sm text-slate-600">
-                      {language === "ar" ? "التحقق" : "Verification"}
+                      {t("accountVerification")}
                     </p>
                     <div className={`text-sm font-bold py-1 px-2 rounded-full inline-block mt-1 ${user?.verifiedByAdmin ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}`}>
                       {user?.verifiedByAdmin ? (language === "ar" ? "موثق" : "Verified") : (language === "ar" ? "قيد المراجعة" : "Pending")}
@@ -227,35 +378,127 @@ export const DonorProfilePage = () => {
               </div>
             </div>
 
+            <div className="bg-white rounded-lg p-6 border border-slate-200">
+              <h3 className="text-xl font-bold text-slate-900">
+                {t("donationAvailability")}
+              </h3>
+
+              <p className="mt-1 text-sm text-slate-600">
+                {t(
+                  "donationAvailabilityDescription"
+                )}
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
+                {donationAvailability.map(
+                  (item) => (
+                    <div
+                      key={item.key}
+                      className={`rounded-lg border p-4 ${item.available
+                        ? "border-green-200 bg-green-50"
+                        : item.waitingPeriod.active
+                          ? "border-orange-200 bg-orange-50"
+                          : "border-amber-200 bg-amber-50"
+                        }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Droplet
+                          className={`w-5 h-5 ${item.available
+                            ? "text-green-600"
+                            : item.waitingPeriod.active
+                              ? "text-orange-600"
+                              : "text-amber-600"
+                            }`}
+                        />
+
+                        <h4 className="font-bold text-slate-900">
+                          {t(item.labelKey)}
+                        </h4>
+                      </div>
+
+                      {item.available ? (
+                        <p className="mt-3 text-sm font-semibold text-green-800">
+                          {t(
+                            "availableBasedOnRecords"
+                          )}
+                        </p>
+                      ) : item.waitingPeriod.active ? (
+                        <div className="mt-3">
+                          <p className="text-sm font-semibold text-orange-800">
+                            {t(
+                              "waitingPeriodActive"
+                            )}
+                          </p>
+
+                          <p className="mt-1 text-sm text-orange-700">
+                            {t("timeRemaining")}:{" "}
+                            {
+                              item.waitingPeriod
+                                .remainingDays
+                            }{" "}
+                            {item.waitingPeriod
+                              .remainingDays === 1
+                              ? t("day")
+                              : t("days")}
+                          </p>
+
+                          <p className="mt-1 text-sm text-orange-700">
+                            {t(
+                              "canDonateAgainStarting"
+                            )}
+                            :{" "}
+                            {
+                              item.waitingPeriod
+                                .formattedNextEligibleDate
+                            }
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="mt-3 text-sm text-amber-800">
+                          {item.reason}
+                        </p>
+                      )}
+                    </div>
+                  )
+                )}
+              </div>
+
+              <div className="mt-5 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                <p className="text-xs text-blue-800">
+                  {t(
+                    "donationMatchingDisclaimer"
+                  )}
+                </p>
+              </div>
+            </div>
+
             {/* Eligibility Info */}
-            {user?.status === "cool-down" &&
-              user?.nextEligibleDate &&
-              new Date(
-                user.nextEligibleDate
-              ) > new Date() && (
+            {new Date(
+              user.nextEligibleDate
+            ) > new Date() && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <p className="text-yellow-800 font-semibold mb-2">
                     {language === "ar" ? "فترة الراحة" : "Cool-down Period"}
                   </p>
-                  <p className="text-yellow-700 text-sm mb-2">
+                  {/* <p className="text-yellow-700 text-sm mb-2">
                     {language === "ar"
                       ? "يجب أن تنتظر 56 يوماً من آخر تبرع قبل التبرع مرة أخرى"
                       : "You must wait 56 days from your last donation before donating again"
                     }
-                  </p>
+                  </p> */}
                   <p className="text-yellow-700 text-sm">
                     {language === "ar" ? "آخر تبرع: " : "Last donation: "}
                     <span className="font-semibold">
-                      {new Date(user.lastDonationDate).toLocaleDateString(
-                        language === "ar" ? "ar-SA" : "en-US"
+                      {formatDateDDMMYYYY(
+                        user.lastDonationDate
                       )}
                     </span>
                   </p>
                   <p className="text-yellow-700 text-sm mt-1">
                     {language === "ar" ? "يمكنك التبرع مرة أخرى من: " : "You can donate again on: "}
                     <span className="font-semibold">
-                      {new Date(user.nextEligibleDate).toLocaleDateString(
-                        language === "ar" ? "ar-SA" : "en-US"
+                      {formatDateDDMMYYYY(
+                        user.nextEligibleDate
                       )}
                     </span>
                   </p>
@@ -295,6 +538,32 @@ export const DonorProfilePage = () => {
                     {language === "ar" ? "الهاتف" : "Phone"}
                   </label>
                   <p className="text-slate-900">{user?.phone}</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-600 mb-2">
+                    {t("dateOfBirth")}
+                  </label>
+
+                  <p className="text-slate-900">
+                    {user?.dateOfBirth
+                      ? formatDateDDMMYYYY(
+                        user.dateOfBirth
+                      )
+                      : t("notProvided")}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-600 mb-2">
+                    {t("biologicalSex")}
+                  </label>
+
+                  <p className="text-slate-900">
+                    {user?.biologicalSex
+                      ? t(user.biologicalSex)
+                      : t("notProvided")}
+                  </p>
                 </div>
               </div>
             </div>
@@ -365,6 +634,59 @@ export const DonorProfilePage = () => {
                   onChange={handleEditChange}
                   className="w-full border border-slate-300 rounded px-3 py-2"
                 />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    {t("dateOfBirth")}
+                  </label>
+
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    name="dateOfBirth"
+                    value={editForm.dateOfBirth}
+                    onChange={handleEditChange}
+                    placeholder="DD/MM/YYYY"
+                    maxLength={10}
+                    pattern="\d{2}/\d{2}/\d{4}"
+                    className="w-full border border-slate-300 rounded px-3 py-2"
+                    required
+                  />
+
+                  <p className="text-xs text-slate-500 mt-1">
+                    {t("dateFormatHint")}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    {t("biologicalSex")}
+                  </label>
+
+                  <select
+                    name="biologicalSex"
+                    value={
+                      editForm.biologicalSex
+                    }
+                    onChange={handleEditChange}
+                    className="w-full border border-slate-300 rounded px-3 py-2"
+                    required
+                  >
+                    <option value="">
+                      {t("selectOption")}
+                    </option>
+
+                    <option value="male">
+                      {t("male")}
+                    </option>
+
+                    <option value="female">
+                      {t("female")}
+                    </option>
+                  </select>
+                </div>
               </div>
 
               <div>
