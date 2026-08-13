@@ -1,44 +1,21 @@
-import React, { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import React, { useEffect, } from "react";
+import { useNavigate, useSearchParams, } from "react-router-dom";
 import { useLanguage } from "../components/LanguageContext.jsx";
 import { useAuth } from "../components/AuthContext.jsx";
 import AppLayout from "../components/AppLayout.jsx";
 import { NewRequestForm } from "../components/NewRequestForm.jsx";
 import { PortalHospital } from "../components/PortalHospital.jsx";
-import { PortalAdmin } from "../components/PortalAdmin.jsx";
 import { RequestsList } from "../components/RequestsList.jsx";
 import { AssignedRequests } from "../components/AssignedRequests.jsx";
 import { DonationHistory } from "../components/DonationHistory.jsx";
 import { DonorProfilePage } from "./DonorProfilePage.jsx";
 
 export default function DashboardPage() {
-  const { language } = useLanguage();
+  const { t, language } = useLanguage();
   const { user } = useAuth();
-  const location = useLocation();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] =
-    useState(() => {
-      const requestedTab =
-        new URLSearchParams(
-          window.location.search
-        ).get("tab");
+  const [searchParams, setSearchParams,] = useSearchParams();
 
-      if (requestedTab) {
-        return requestedTab;
-      }
-
-      const defaultTab =
-        user?.role === "donor"
-          ? "requests"
-          : "seek-blood";
-
-      return (
-        localStorage.getItem(
-          "dashboardActiveTab"
-        ) ||
-        defaultTab
-      );
-    });
 
   // Build tabs based on user role
   const getTabs = () => {
@@ -50,7 +27,7 @@ export default function DashboardPage() {
     const donorTabs = [
       { id: "assigned", label: language === "ar" ? "الطلبات المعينة" : "Assigned Requests", icon: "✓" },
       { id: "requests", label: language === "ar" ? "الطلبات" : "Requests", icon: "❤️" },
-      { id: "history", label: language === "ar" ? "السجل" : "History", icon: "🏆" },
+      { id: "history", label: language === "ar" ? "سجل تبرعاتي" : "History", icon: "🏆" },
       { id: "profile", label: language === "ar" ? "ملفي الشخصي" : "Profile", icon: "👤" }
     ];
 
@@ -59,70 +36,28 @@ export default function DashboardPage() {
       tabs = [...donorTabs, ...commonTabs];
     }
 
-    if (user?.role === "super_admin") {
-      tabs.push({ id: "admin", label: language === "ar" ? "الإدارة" : "Admin", icon: "⚙️" });
-    }
-
     return tabs;
   };
 
   const tabs = getTabs();
 
+  const validTabIds = tabs.map((tab) => tab.id);
+  const defaultTab = user?.role === "donor" ? "requests" : "seek-blood";
+  const requestedTab = searchParams.get("tab");
+  const activeTab = validTabIds.includes(requestedTab) ? requestedTab : defaultTab;
+
   useEffect(() => {
-    const requestedTab =
-      new URLSearchParams(
-        location.search
-      ).get("tab");
-
-    const isValidTab =
-      tabs.some(
-        (tab) =>
-          tab.id === requestedTab
-      );
-
-    if (
-      requestedTab &&
-      isValidTab
-    ) {
-      setActiveTab(
-        requestedTab
-      );
-
-      localStorage.setItem(
-        "dashboardActiveTab",
-        requestedTab
-      );
+    if (requestedTab !== activeTab) {
+      setSearchParams({ tab: activeTab, }, { replace: true, });
     }
-  }, [
-    location.search,
-    user?.role
-  ]);
+  }, [requestedTab, activeTab, setSearchParams,]);
+
 
   const handleTabClick = (
     tabId
   ) => {
-    setActiveTab(tabId);
-
-    localStorage.setItem(
-      "dashboardActiveTab",
-      tabId
-    );
-
-    const searchParams =
-      new URLSearchParams(
-        location.search
-      );
-
-    searchParams.set(
-      "tab",
-      tabId
-    );
-
-    navigate({
-      pathname:
-        location.pathname,
-      search:
-        `?${searchParams.toString()}`
+    setSearchParams({
+      tab: tabId,
     });
 
     window.dispatchEvent(
@@ -130,6 +65,11 @@ export default function DashboardPage() {
         "closeMobileMenu"
       )
     );
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   };
 
   // Mobile menu component
@@ -153,6 +93,21 @@ export default function DashboardPage() {
 
   return (
     <AppLayout mobileMenu={MobileMenu}>
+      {user?.role === "donor" && (
+        <div className="hidden justify-end md:flex">
+          <button
+            type="button"
+            onClick={() =>
+              navigate(
+                "/donor-intent"
+              )
+            }
+            className="text-sm font-semibold text-slate-600 hover:text-red-600"
+          >
+            {t("changePurpose")}
+          </button>
+        </div>
+      )}
       <div className="space-y-6">
         {/* Tab Navigation - Desktop only */}
         <div className="hidden md:flex gap-2 border-b border-slate-200 overflow-x-auto pb-2">
@@ -182,7 +137,6 @@ export default function DashboardPage() {
           {/* Common tabs */}
           {activeTab === "seek-blood" && <NewRequestForm />}
           {activeTab === "hospitals" && <PortalHospital user={user} />}
-          {activeTab === "admin" && <PortalAdmin user={user} />}
         </div>
       </div>
     </AppLayout>

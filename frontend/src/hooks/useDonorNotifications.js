@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { API_BASE_URL } from '../utils/api.js';
 
 export const useDonorNotifications = (accessToken, options = {}) => {
@@ -11,17 +11,22 @@ export const useDonorNotifications = (accessToken, options = {}) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const hasLoadedRef = useRef(false);
 
   const fetchNotifications = useCallback(async () => {
     if (!accessToken) {
+      hasLoadedRef.current = false;
       setNotifications([]);
       setUnreadCount(0);
       setLoading(false);
+
       return;
     }
 
     try {
-      setLoading(true);
+      if (!hasLoadedRef.current) {
+        setLoading(true);
+      }
       setError(null);
 
       const response = await fetch(
@@ -57,6 +62,35 @@ export const useDonorNotifications = (accessToken, options = {}) => {
 
       setNotifications(newNotifications);
       setUnreadCount(newUnreadCount);
+
+      window.dispatchEvent(
+        new CustomEvent(
+          "donor-notifications-updated",
+          {
+            detail: {
+              notifications:
+                newNotifications,
+              unreadCount:
+                newUnreadCount,
+            },
+          }
+        )
+      );
+      window.dispatchEvent(
+        new CustomEvent(
+          "donor-notifications-updated",
+          {
+            detail: {
+              notifications:
+                newNotifications,
+              unreadCount:
+                newUnreadCount,
+            },
+          }
+        )
+      );
+
+      hasLoadedRef.current = true;
 
     } catch (err) {
       console.error(

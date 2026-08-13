@@ -156,8 +156,8 @@ export const translations = {
     ar: "كلمتا المرور غير متطابقتين."
   },
   passwordTooShort: {
-    en: "Password must be at least 8 characters long.",
-    ar: "يجب أن تكون كلمة المرور مكونة من 8 أحرف على الأقل."
+    en: "Password must contain at least 12 characters, including uppercase, lowercase, a number, and a special character.",
+    ar: "يجب أن تتكون كلمة المرور من 12 محرفاً على الأقل، وأن تتضمن حرفاً كبيراً وحرفاً صغيراً ورقماً ورمزاً خاصاً."
   },
   accountPendingVerification: {
     en: "Your account is pending verification by the admin. You will be notified once it is approved.",
@@ -678,7 +678,11 @@ export const translations = {
   },
   donateNow: {
     en: "Donate Now",
-    ar: "تعيين نفسي"
+    ar: "تبرع"
+  },
+  view: {
+    en: "view",
+    ar: "التفاصيل"
   },
 
   // Request Form Tab
@@ -1210,5 +1214,90 @@ export const translations = {
   platformEligibilityDisclaimer: {
     en: "Platform eligibility is based only on account verification, age, blood type, and recorded donation history. The hospital performs all medical tests and makes the final donation decision.",
     ar: "تعتمد أهلية المنصة فقط على توثيق الحساب والعمر وفئة الدم وسجل التبرعات المسجل. يجري المستشفى جميع الفحوص الطبية ويتخذ القرار النهائي بشأن التبرع.",
+  },
+
+  whyAreYouHereToday: {
+    en: "What would you like to do?",
+    ar: "ماذا تريد أن تفعل؟",
+  },
+
+  chooseDonorIntentDescription: {
+    en: "Choose how you want to use the system during this visit.",
+    ar: "اختر كيف تريد استخدام النظام خلال هذه الزيارة.",
+  },
+
+  iWantToDonate: {
+    en: "I Want to Donate",
+    ar: "أريد التبرع",
+  },
+
+  iWantToDonateDescription: {
+    en: "View potentially compatible blood requests and respond to a requester.",
+    ar: "عرض طلبات الدم المتوافقة مبدئياً والاستجابة لأحد طالبي الدم.",
+  },
+
+  viewDonationRequests: {
+    en: "View donation requests",
+    ar: "عرض طلبات التبرع",
+  },
+
+  iWantToRequestBlood: {
+    en: "I Want to Request Blood",
+    ar: "أريد طلب دم",
+  },
+
+  iWantToRequestBloodDescription: {
+    en: "Create a request so potentially compatible donors can find and respond to it.",
+    ar: "إنشاء طلب ليتمكن المتبرعون المتوافقون مبدئياً من العثور عليه والاستجابة له.",
+  },
+
+  createBloodRequest: {
+    en: "Create a blood request",
+    ar: "إنشاء طلب دم",
+  },
+
+  rememberMyPurpose: {
+    en: "Remember my choice on this device",
+    ar: "تذكر اختياري على هذا الجهاز",
+  },
+
+  intentScreenDisclaimer: {
+    en: "The system connects requesters with potential donors. All donation procedures, medical tests, and final decisions take place at the hospital.",
+    ar: "يربط النظام طالبي الدم بالمتبرعين المحتملين. تتم جميع إجراءات التبرع والفحوص الطبية والقرارات النهائية في المستشفى.",
+  },
+
+  changePurpose: {
+    en: "Change purpose",
+    ar: "تغيير سبب الدخول",
+  },
+
+  signingOut: {
+    en: "Signing out...",
+    ar: "جارٍ تسجيل الخروج..."
+  },
+
+  accessDenied: {
+    en: "Access Denied",
+    ar: "الوصول غير مسموح"
+  },
+
+  accessDeniedDescription: {
+    en: "You do not have permission to access this page.",
+    ar: "ليس لديك صلاحية للوصول إلى هذه الصفحة."
+  },
+
+  backToDashboard: {
+    en: "Back to Dashboard",
+    ar: "العودة إلى لوحة التحكم"
+  },
+
+  failedToSavePurpose: {
+    en: "Your selected purpose could not be saved. Please try again.",
+    ar: "تعذر حفظ سبب الدخول المحدد. يرجى المحاولة مجدداً."
+  },
+
+  assignmentCancelledSuccessfully: {
+    en: "Assignment cancelled successfully.",
+    ar: "تم إلغاء التعيين بنجاح."
   },
 };

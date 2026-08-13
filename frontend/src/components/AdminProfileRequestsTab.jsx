@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect, useRef } from "react";
 import { useLanguage } from "./LanguageContext.jsx";
 import { useAuth } from "./AuthContext.jsx";
 import { useDataCache } from "./DataCacheContext.jsx";
 import { API_BASE_URL, getAccessToken } from "../utils/api.js";
-import { Check, X, User, Trash2 } from "lucide-react";
+import { Check, X, User, } from "lucide-react";
 import { ConfigurableTable } from "./ConfigurableTable.jsx";
 import { formatDateDDMMYYYY, } from "../utils/dateFormat.js";
 
-export const AdminProfileRequestsTab = ({ pendingOnly = false }) => {
+export const AdminProfileRequestsTab = ({ pendingOnly = false, onPendingCountChange, }) => {
   const { t, language } = useLanguage();
   const { user, accessToken } = useAuth();
   const { getCachedData, invalidateCache } = useDataCache();
@@ -15,42 +15,221 @@ export const AdminProfileRequestsTab = ({ pendingOnly = false }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const requestInProgressRef = useRef(false);
+  const componentMountedRef = useRef(true);
+  const refreshQueuedRef = useRef(false);
 
   useEffect(() => {
-    fetchProfileRequests();
+    componentMountedRef.current =
+      true;
+
+    return () => {
+      componentMountedRef.current =
+        false;
+    };
   }, []);
 
-  const fetchProfileRequests = async (forceRefresh = false) => {
-    try {
-      // Check cache first
-      const cachedRequests = getCachedData(user?.role, 'profileRequests');
-      if (cachedRequests && !forceRefresh) {
-        setRequests(Array.isArray(cachedRequests) ? cachedRequests : []);
-        setLoading(false);
-        return;
-      }
+  useEffect(() => {
+    const safeRequests =
+      Array.isArray(requests)
+        ? requests
+        : [];
 
-      // Fallback to fetch if cache empty
-      setLoading(true);
-      const token = getAccessToken();
-      if (!token) {
-        throw new Error('No authentication token found. Please log in.');
-      }
-      const response = await fetch(`${API_BASE_URL}/auth/profile-requests`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
+    const pendingCount =
+      safeRequests.filter(
+        (request) =>
+          request?.status ===
+          "pending"
+      ).length;
+
+    onPendingCountChange?.(
+      pendingCount
+    );
+  }, [
+    requests,
+    onPendingCountChange,
+  ]);
+
+  const fetchProfileRequests =
+    useCallback(
+      async ({ forceRefresh = false, showLoader = false, } = {}) => {
+
+        if (requestInProgressRef.current) {
+          refreshQueuedRef.current = true;
+
+          return;
+        }
+
+        requestInProgressRef.current = true;
+
+        try {
+          if (showLoader) {
+            setLoading(true);
+          }
+
+          if (!forceRefresh) {
+            const cachedRequests =
+              getCachedData(
+                user?.role,
+                "profileRequests"
+              );
+
+            if (
+              Array.isArray(
+                cachedRequests
+              )
+            ) {
+              if (
+                componentMountedRef.current
+              ) {
+                setRequests(
+                  Array.isArray(cachedRequests)
+                    ? cachedRequests
+                    : []
+                );
+
+                setLoading(false);
+              }
+
+            }
+          }
+
+          const token =
+            getAccessToken() ||
+            accessToken;
+
+          if (!token) {
+            throw new Error(
+              "Authentication required"
+            );
+          }
+
+          const response =
+            await fetch(
+              `${API_BASE_URL}/auth/profile-requests`,
+              {
+                method: "GET",
+                headers: {
+                  Authorization:
+                    `Bearer ${token}`,
+                  Accept:
+                    "application/json",
+                },
+              }
+            );
+
+          const data =
+            await response.json();
+
+          if (!response.ok) {
+            throw new Error(
+              data?.error ||
+              data?.message ||
+              "Failed to fetch profile requests"
+            );
+          }
+
+          const receivedRequests =
+            Array.isArray(data)
+              ? data
+              : Array.isArray(
+                data?.requests
+              )
+                ? data.requests
+                : [];
+
+          if (componentMountedRef.current) {
+            setRequests(
+              Array.isArray(receivedRequests)
+                ? receivedRequests
+                : []
+            );
+
+            setError("");
+          }
+        } catch (fetchError) {
+          console.error(
+            "[PROFILE REQUESTS] Refresh error:",
+            fetchError
+          );
+
+          if (componentMountedRef.current) {
+            setError(fetchError.message);
+          }
+        } finally {
+          requestInProgressRef.current =
+            false;
+
+          if (
+            componentMountedRef.current
+          ) {
+            setLoading(false);
+          }
+
+          const shouldRefreshAgain =
+            refreshQueuedRef.current;
+
+          refreshQueuedRef.current =
+            false;
+
+          if (
+            shouldRefreshAgain &&
+            componentMountedRef.current
+          ) {
+            window.setTimeout(
+              () => {
+                fetchProfileRequests({
+                  forceRefresh: true,
+                  showLoader: false,
+                });
+              },
+              0
+            );
+          }
+        }
+      },
+      [accessToken, getCachedData, user?.role,]
+    );
+
+  useEffect(() => {
+    fetchProfileRequests({
+      showLoader: true,
+    });
+    const intervalId =
+      window.setInterval(
+        () => {
+          fetchProfileRequests({
+            forceRefresh: true,
+            showLoader: false,
+          });
         },
-      });
-      if (!response.ok) throw new Error("Failed to fetch profile requests");
-      const data = await response.json();
-      setRequests(Array.isArray(data) ? data : []);
-    } catch (err) {
-      setError(err.message);
-      console.error("Error fetching profile requests:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+        10000
+      );
+
+    const handlePendingUpdate =
+      () => {
+        fetchProfileRequests({
+          forceRefresh: true,
+          showLoader: false,
+        });
+      };
+
+    window.addEventListener(
+      "admin-pending-updated",
+      handlePendingUpdate
+    );
+
+    return () => {
+      window.clearInterval(
+        intervalId
+      );
+
+      window.removeEventListener(
+        "admin-pending-updated",
+        handlePendingUpdate
+      );
+    };
+  }, [fetchProfileRequests]);
 
   const handleRequestProcessed = async (requestId, status) => {
     setRequests((currentRequests) =>
@@ -83,7 +262,10 @@ export const AdminProfileRequestsTab = ({ pendingOnly = false }) => {
       )
     );
 
-    await fetchProfileRequests(true);
+    await fetchProfileRequests({
+      forceRefresh: true,
+      showLoader: false,
+    });
   };
 
   const handleApprove = async (requestId) => {
@@ -108,9 +290,6 @@ export const AdminProfileRequestsTab = ({ pendingOnly = false }) => {
         "approved"
       );
 
-      window.dispatchEvent(
-        new CustomEvent("admin-pending-updated")
-      );
     } catch (err) {
       setError(err.message);
     } finally {
@@ -175,12 +354,6 @@ export const AdminProfileRequestsTab = ({ pendingOnly = false }) => {
       await handleRequestProcessed(
         requestId,
         "rejected"
-      );
-      invalidateCache(user?.role, "profileRequests");
-      await fetchProfileRequests();
-
-      window.dispatchEvent(
-        new CustomEvent("admin-pending-updated")
       );
     } catch (err) {
       setError(err.message);
@@ -308,7 +481,23 @@ export const AdminProfileRequestsTab = ({ pendingOnly = false }) => {
     },
   ];
 
-  const pendingRequests = requests.filter((r) => r.status === "pending");
+  // const pendingRequests = requests.filter((r) => r.status === "pending");
+  const safeRequests =
+    Array.isArray(requests)
+      ? requests
+      : [];
+
+  const pendingRequests =
+    safeRequests.filter(
+      (request) =>
+        request?.status ===
+        "pending"
+    );
+
+  const displayedRequests =
+    pendingOnly
+      ? pendingRequests
+      : safeRequests;
 
   const actions = [
     {
@@ -324,32 +513,46 @@ export const AdminProfileRequestsTab = ({ pendingOnly = false }) => {
         }
       },
       className: "text-green-600 hover:text-green-800 p-1",
-      disabled: (row) => row.status !== "pending",
+      disabled: (row) =>
+        actionLoading ||
+        row.status !== "pending",
     },
     {
       label: t("reject"),
       icon: X,
+
       onClick: (request) => {
-        if (
-          confirm(
-            t("confirmRejectRequest")
-          )
-        ) {
-          handleReject(request._id || request.id);
-        }
+        handleReject(
+          request._id ||
+          request.id
+        );
       },
-      className: "text-red-600 hover:text-red-800 p-1",
-      disabled: (row) => row.status !== "pending",
+
+      className:
+        "text-red-600 hover:text-red-800 p-1",
+
+      disabled: (row) =>
+        actionLoading ||
+        row.status !== "pending",
     },
   ];
 
-  if (loading) return <div className="text-center py-4">Loading...</div>;
+  if (
+    loading &&
+    displayedRequests.length === 0
+  ) {
+    return (
+      <div className="py-8 text-center text-slate-500">
+        {t("loading")}
+      </div>
+    );
+  }
 
   return (
     <div>
       {error && <div className="bg-red-50 text-red-600 p-3 rounded mb-4">{error}</div>}
 
-      {pendingRequests.length === 0 ? (
+      {displayedRequests.length === 0 ? (
         <div className="bg-white rounded-lg p-8 border border-slate-200 text-center">
           <User className="w-12 h-12 text-slate-400 mx-auto mb-3" />
           <p className="text-slate-600 font-semibold">
@@ -359,7 +562,7 @@ export const AdminProfileRequestsTab = ({ pendingOnly = false }) => {
       ) : (
         <ConfigurableTable
           columns={columns}
-          data={pendingOnly ? pendingRequests : requests}
+          data={displayedRequests}
           title={t("profileChangeRequests")}
           actions={actions}
           searchableFields={["email", "requestType"]}

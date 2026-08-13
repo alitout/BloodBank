@@ -3,21 +3,38 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useLanguage } from "./LanguageContext.jsx";
 import AppLayout from "./AppLayout.jsx";
 
+const ADMIN_TAB_IDS = [
+  "overview",
+  "requests",
+  "hospitals",
+  "donations",
+  "accounts",
+  "management",
+  "pending",
+];
+
+const getStoredAdminTab = () => {
+  const savedTab =
+    localStorage.getItem(
+      "adminActiveTab"
+    );
+
+  if (savedTab === "profiles") {
+    return "pending";
+  }
+
+  return ADMIN_TAB_IDS.includes(
+    savedTab
+  )
+    ? savedTab
+    : "overview";
+};
+
 export default function AdminLayout({ children }) {
   const { language } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
-  const [activeTab, setActiveTab] =
-    useState(() => {
-      const savedTab =
-        localStorage.getItem(
-          "adminActiveTab"
-        );
-
-      return savedTab === "profiles"
-        ? "pending"
-        : savedTab || "overview";
-    });
+  const [activeTab, setActiveTab,] = useState(getStoredAdminTab);
 
   const tabs = [
     { id: "overview", label: language === "ar" ? "نظرة عامة" : "Overview", icon: "📊" },
@@ -28,31 +45,6 @@ export default function AdminLayout({ children }) {
     { id: "management", label: language === "ar" ? "الإدارة" : "Management", icon: "⚙️" },
     { id: "pending", label: language === "ar" ? "قيد الانتظار" : "Pending", icon: "⏳" }
   ];
-
-  useEffect(() => {
-    const requestedTab =
-      new URLSearchParams(
-        location.search
-      ).get("tab");
-
-    const validTab =
-      tabs.some(
-        (tab) =>
-          tab.id === requestedTab
-      );
-
-    if (requestedTab && validTab) {
-      setActiveTab(requestedTab);
-
-      localStorage.setItem(
-        "adminActiveTab",
-        requestedTab
-      );
-    }
-  }, [
-    location.search,
-    language
-  ]);
 
   const handleTabClick = (tabId) => {
     setActiveTab(tabId);
@@ -70,22 +62,14 @@ export default function AdminLayout({ children }) {
       );
     }
 
-    navigate({
-      pathname:
-        location.pathname,
-      search:
-        `?${searchParams.toString()}`
-    });
-
-    window.dispatchEvent(
-      new CustomEvent(
-        "adminTabChange",
-        {
-          detail: {
-            tabId
-          }
-        }
-      )
+    navigate(
+      {
+        pathname: location.pathname,
+        search: `?${searchParams.toString()}`,
+      },
+      {
+        replace: true,
+      }
     );
 
     window.dispatchEvent(
@@ -106,16 +90,14 @@ export default function AdminLayout({ children }) {
         location.search
       );
 
-    const requestedTab =
+    let requestedTab =
       searchParams.get("tab");
 
-    /*
-     * Redirect the removed old Profiles
-     * tab to the new Pending action center.
-     */
     if (
       requestedTab === "profiles"
     ) {
+      requestedTab = "pending";
+
       searchParams.set(
         "tab",
         "pending"
@@ -125,57 +107,56 @@ export default function AdminLayout({ children }) {
         "section",
         "profile-requests"
       );
-
-      localStorage.setItem(
-        "adminActiveTab",
-        "pending"
-      );
-
-      setActiveTab(
-        "pending"
-      );
-
-      navigate({
-        pathname:
-          location.pathname,
-        search:
-          `?${searchParams.toString()}`
-      }, {
-        replace: true
-      });
-
-      return;
-    }
-
-    const validTabs = [
-      "overview",
-      "requests",
-      "hospitals",
-      "donations",
-      "accounts",
-      "management",
-      "pending"
-    ];
-
-    if (
-      requestedTab &&
-      validTabs.includes(
+    } else if (
+      !ADMIN_TAB_IDS.includes(
         requestedTab
       )
     ) {
-      setActiveTab(
+      requestedTab =
+        getStoredAdminTab();
+
+      searchParams.set(
+        "tab",
         requestedTab
       );
 
-      localStorage.setItem(
-        "adminActiveTab",
-        requestedTab
+      searchParams.delete(
+        "section"
+      );
+    }
+
+    setActiveTab(
+      requestedTab
+    );
+
+    localStorage.setItem(
+      "adminActiveTab",
+      requestedTab
+    );
+
+    const normalizedSearch =
+      `?${searchParams.toString()}`;
+
+    if (
+      normalizedSearch !==
+      location.search
+    ) {
+      navigate(
+        {
+          pathname:
+            location.pathname,
+          search:
+            normalizedSearch,
+        },
+        {
+          replace: true,
+        }
       );
     }
   }, [
     location.pathname,
     location.search,
-    navigate
+    navigate,
   ]);
 
   // Mobile menu component

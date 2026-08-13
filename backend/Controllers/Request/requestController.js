@@ -532,12 +532,78 @@ const assignSelfToRequest = async (req, res) => {
         connectionAssessment,
       });
     }
+    const existingDonation =
+      await Donation.findOne({
+        donorUid: donorId,
+        requestId:
+          request._id,
+      });
+
+    if (
+      existingDonation?.status ===
+      "approved"
+    ) {
+      return res.status(409).json({
+        error:
+          "An approved donation already exists for this request",
+      });
+    }
+
+    if (
+      existingDonation?.status ===
+      "pending_admin_approval"
+    ) {
+      return res.status(409).json({
+        error:
+          "A donation for this request is already waiting for administrator approval",
+      });
+    }
+
+    const assignedAt =
+      new Date();
+
+    if (existingDonation) {
+      existingDonation.status = "pending_confirmation";
+      existingDonation.unitsAssigned = unitsToAssign;
+      existingDonation.unitsCompleted = 0;
+      existingDonation.donationType = request.bloodGenre;
+      existingDonation.donorCompletedAt = null;
+      existingDonation.adminApprovedAt = null;
+      existingDonation.adminApprovedBy = null;
+      existingDonation.donationDate = null;
+      existingDonation.rejectionReason = null;
+      existingDonation.rejectedAt = null;
+      existingDonation.rejectedBy = null;
+      existingDonation.updatedAt = assignedAt;
+      await existingDonation.save();
+
+      await Notification.updateMany(
+        {
+          donorId,
+          requestId:
+            request._id,
+          type:
+            "donation_rejected",
+          actionTaken:
+            false,
+        },
+        {
+          $set: {
+            read: true,
+            readAt:
+              assignedAt,
+            actionTaken:
+              true,
+          },
+        }
+      );
+    }
     // Add donor to assignedDonors array
     request.assignedDonors.push({
       donorUid: donorId,
       unitsAssigned: unitsToAssign,
       unitsCompleted: 0,
-      assignedAt: new Date()
+      assignedAt,
     });
 
     // Update request
@@ -1119,50 +1185,176 @@ const getDonationHistory = async (req, res) => {
   }
 };
 
-const cancelAssignment = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const donorId = req.user?.uid; // From auth middleware
+const cancelAssignment =
+  async (req, res) => {
+    try {
+      const {
+        id,
+      } = req.params;
 
-    if (!donorId) {
-      return res.status(401).json({ error: 'Donor ID not found in token' });
+      const donorId =
+        req.user?.uid;
+
+      if (!donorId) {
+        return res.status(401).json({
+          error:
+            "Donor ID not found in token",
+        });
+      }
+
+      const request =
+        await Requester.findById(
+          id
+        );
+
+      if (!request) {
+        return res.status(404).json({
+          error:
+            "Blood request not found",
+        });
+      }
+
+      const donorIndex =
+        request.assignedDonors
+          ?.findIndex(
+            (assignment) =>
+              assignment.donorUid ===
+              donorId
+          );
+
+      if (
+        donorIndex === -1 ||
+        donorIndex === undefined
+      ) {
+        return res.status(403).json({
+          error:
+            "This request is not assigned to you",
+        });
+      }
+
+
+      const donation =
+        await Donation.findOne({
+          donorUid: donorId,
+          requestId:
+            request._id,
+        });
+
+
+      if (
+        donation?.status ===
+        "approved"
+      ) {
+        return res.status(409).json({
+          error:
+            "An approved donation cannot be cancelled",
+        });
+      }
+
+      if (
+        donation?.status ===
+        "pending_admin_approval"
+      ) {
+        return res.status(409).json({
+          error:
+            "This donation is waiting for administrator approval and cannot be cancelled",
+        });
+      }
+
+      const cancelledAt =
+        new Date();
+
+      request.assignedDonors.splice(
+        donorIndex,
+        1
+      );
+
+
+      const totalCompleted =
+        request.assignedDonors.reduce(
+          (
+            total,
+            assignment
+          ) =>
+            total +
+            Number(
+              assignment.unitsCompleted ||
+              0
+            ),
+          0
+        );
+
+      if (
+        totalCompleted <
+        request.unitsNeeded
+      ) {
+        request.status =
+          "pending";
+      }
+
+      request.updatedAt =
+        cancelledAt;
+
+      await request.save();
+
+
+      if (donation) {
+        donation.status = "cancelled";
+        donation.unitsCompleted = 0;
+        donation.donorCompletedAt = null;
+        donation.adminApprovedAt = null;
+        donation.adminApprovedBy = null;
+        donation.donationDate = null;
+        donation.updatedAt = cancelledAt;
+        await donation.save();
+      }
+
+      await Notification.updateMany(
+        {
+          donorId,
+          requestId:
+            request._id,
+          type:
+            "donation_rejected",
+          actionTaken:
+            false,
+        },
+        {
+          $set: {
+            read: true,
+            readAt:
+              cancelledAt,
+            actionTaken:
+              true,
+          },
+        }
+      );
+
+      console.log(
+        "[REQUESTER] Assignment cancelled:",
+        {
+          requestId: id,
+          donorId,
+        }
+      );
+
+      return res.json({
+        message:
+          "Assignment cancelled successfully",
+        request,
+      });
+    } catch (error) {
+      console.error(
+        "[REQUESTER] Error cancelling assignment:",
+        error.message
+      );
+
+      return res.status(500).json({
+        error:
+          "Failed to cancel assignment",
+      });
     }
-
-    console.log('[REQUESTER] Cancelling assignment for request:', id, 'Donor:', donorId);
-
-    // Get the request
-    const request = await Requester.findById(id);
-    if (!request) {
-      return res.status(404).json({ error: 'Blood request not found' });
-    }
-
-    // Find and remove donor from assignedDonors
-    const donorIndex = request.assignedDonors?.findIndex(d => d.donorUid === donorId);
-    if (donorIndex === -1 || donorIndex === undefined) {
-      return res.status(403).json({ error: 'This request is not assigned to you' });
-    }
-
-    request.assignedDonors.splice(donorIndex, 1);
-
-    // If no more donors assigned and request is fulfilled, reset status to pending
-    if (request.assignedDonors.length === 0) {
-      request.status = 'pending';
-    }
-
-    request.updatedAt = new Date();
-    const updatedRequest = await request.save();
-
-    console.log('[REQUESTER] Assignment cancelled for request:', id);
-
-    res.json({
-      message: 'Assignment cancelled successfully',
-      request: updatedRequest
-    });
-  } catch (error) {
-    console.error('[REQUESTER] Error cancelling assignment:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-};
+  };
 
 // Get a single blood request by ID
 const getRequesterById = async (req, res) => {

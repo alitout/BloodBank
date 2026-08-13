@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { useLanguage } from "./LanguageContext.jsx";
 import { useDB } from "./DBContext.jsx";
 import { useAuth } from "./AuthContext.jsx";
@@ -16,63 +16,29 @@ export const PortalAdmin = ({ user }) => {
   const { requesters, donors, hospitals, appointments, updateRequesterStatus, fetchAdminData, refreshData, isLoading } = useDB();
   const { accounts } = useAuth();
   const location = useLocation();
-  const [activeTab, setActiveTab] =
-    useState(() => {
-      const savedTab =
-        localStorage.getItem(
-          "adminActiveTab"
-        );
 
-      return savedTab === "profiles"
-        ? "pending"
-        : savedTab || "overview";
-    });
+  const validAdminTabs = [
+    "overview",
+    "requests",
+    "hospitals",
+    "donations",
+    "accounts",
+    "management",
+    "pending",
+  ];
 
-  React.useEffect(() => {
-    const requestedTab =
-      new URLSearchParams(
-        location.search
-      ).get("tab");
+  const requestedTab =
+    new URLSearchParams(
+      location.search
+    ).get("tab");
 
-    const validTabs = [
-      "overview",
-      "requests",
-      "hospitals",
-      "donations",
-      "accounts",
-      "management",
-      "pending"
-    ];
+  const activeTab =
+    validAdminTabs.includes(
+      requestedTab
+    )
+      ? requestedTab
+      : "overview";
 
-    if (
-      requestedTab &&
-      validTabs.includes(
-        requestedTab
-      )
-    ) {
-      setActiveTab(
-        requestedTab
-      );
-
-      localStorage.setItem(
-        "adminActiveTab",
-        requestedTab
-      );
-    }
-  }, [location.search]);
-
-  React.useEffect(() => {
-    const requestedTab =
-      new URLSearchParams(location.search).get("tab");
-
-    if (requestedTab) {
-      setActiveTab(requestedTab);
-      localStorage.setItem(
-        "adminActiveTab",
-        requestedTab
-      );
-    }
-  }, [location.search]);
 
   React.useEffect(() => {
     const loadAdminDashboard = async () => {
@@ -89,50 +55,12 @@ export const PortalAdmin = ({ user }) => {
     loadAdminDashboard();
   }, []);
 
-  // Save activeTab to localStorage whenever it changes
-  React.useEffect(() => {
-    localStorage.setItem("adminActiveTab", activeTab);
-  }, [activeTab]);
-
-  // Listen for tab changes from mobile menu
-  React.useEffect(() => {
-    const handleTabChange = (event) => {
-      setActiveTab(event.detail.tabId);
-    };
-
-    window.addEventListener("adminTabChange", handleTabChange);
-    return () => window.removeEventListener("adminTabChange", handleTabChange);
-  }, []);
 
   const pendingRequests = requesters.filter(r => r.status === "pending");
   const fulfilledRequests = requesters.filter(r => r.status === "fulfilled");
 
   return (
     <div className="space-y-6">
-      <div className="hidden md:flex gap-2 border-b border-slate-200 overflow-x-auto">
-        {["overview", "requests", "hospitals", "donations", "accounts", "profiles", "management", "pending"].map(tab => {
-          const tabLabels = {
-            overview: t("overviewTab"),
-            requests: t("requestsTab"),
-            hospitals: t("hospitalsTab"),
-            donations: t("donationsTab"),
-            accounts: t("accountsTab"),
-            management: t("managementTab"),
-            pending: t("pendingTab")
-          };
-
-          const tabIcons = {
-            overview: "📊",
-            requests: "📋",
-            hospitals: "🏥",
-            donations: "🩸",
-            accounts: "👥",
-            management: "⚙️",
-            pending: "⏳"
-          };
-        })}
-      </div>
-
       {activeTab === "overview" && (
         <div className="overview">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -197,7 +125,7 @@ export const PortalAdmin = ({ user }) => {
 
       {activeTab === "management" && <AdminManagement user={user} />}
 
-      {activeTab === "pending" && <PendingVerification user={user} />}
+      {activeTab === "pending" && <PendingVerification />}
     </div>
   );
 };

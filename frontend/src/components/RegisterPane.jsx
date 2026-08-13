@@ -2,13 +2,12 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "./AuthContext.jsx";
 import { useLanguage } from "./LanguageContext.jsx";
-import { useDB } from "./DBContext.jsx";
 import { UserCheck, KeyRound, Mail, User, ShieldAlert, CheckCircle, Smartphone, Eye, EyeOff } from "lucide-react";
 
 export const RegisterPane = ({ onSuccess }) => {
     const navigate = useNavigate();
     const { register } = useAuth();
-    const { t, language } = useLanguage();
+    const { t } = useLanguage();
 
     const [fname, setFname] = useState("");
     const [lname, setLname] = useState("");
@@ -45,8 +44,17 @@ export const RegisterPane = ({ onSuccess }) => {
                 return;
             }
 
-            if (password.length < 6) {
-                setErrorMsg(t("passwordTooShort"));
+            const strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>]).{12,}$/;
+
+            if (
+                !strongPasswordPattern.test(
+                    password
+                )
+            ) {
+                setErrorMsg(
+                    t("passwordTooShort")
+                );
+
                 setIsSubmitting(false);
                 return;
             }
@@ -79,10 +87,12 @@ export const RegisterPane = ({ onSuccess }) => {
 
             if (result.success) {
                 setSuccessMsg(t("registrationSuccessful"));
-                setTimeout(() => {
-                    if (onSuccess) onSuccess();
-                    navigate("/dashboard");
-                }, 1500);
+                if (onSuccess) {
+                    onSuccess();
+                }
+                navigate("/donor-intent", { replace: true, });
+
+                return;
             } else {
                 setErrorMsg(result.message);
             }

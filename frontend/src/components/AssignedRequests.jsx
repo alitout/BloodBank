@@ -1,70 +1,214 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "./AuthContext.jsx";
 import { useLanguage } from "./LanguageContext.jsx";
-import { useDataCache } from "./DataCacheContext.jsx";
 import { API_BASE_URL, getAccessToken } from "../utils/api.js";
 import { CheckCircle, XCircle, Calendar, MapPin, Droplet, AlertCircle } from "lucide-react";
 
 export const AssignedRequests = () => {
-  const { user, accessToken } = useAuth();
-  const { language } = useLanguage();
-  // const { getCachedData } = useDataCache();
+  const { accessToken } = useAuth();
+  const { t, language } = useLanguage();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [processingId, setProcessingId] = useState(null);
+  const requestInProgressRef = useRef(false);
+  const refreshQueuedRef = useRef(false);
+  const componentMountedRef = useRef(true);
 
   useEffect(() => {
-    if (!accessToken) return;
-    fetchAssignedRequests();
-  }, [accessToken]);
+    componentMountedRef.current = true;
 
-  const fetchAssignedRequests = async () => {
-    try {
-      setLoading(true);
-      setError("");
+    return () => {
+      componentMountedRef.current = false;
+    };
+  }, []);
 
-      const token = getAccessToken();
-
-      if (!token) {
-        throw new Error("No authentication token found. Please log in.");
-      }
-
-      const response = await fetch(
-        `${API_BASE_URL}/requesters/assigned-requests`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+  const fetchAssignedRequests =
+    useCallback(
+      async ({ showLoader = false, } = {}) => {
+        if (
+          requestInProgressRef.current
+        ) {
+          refreshQueuedRef.current = true;
+          return;
         }
+        requestInProgressRef.current = true;
+        try {
+          if (showLoader) {
+            setLoading(true);
+          }
+
+          const token =
+            getAccessToken() ||
+            accessToken;
+
+          if (!token) {
+            throw new Error(
+              "Authentication required"
+            );
+          }
+
+          const response =
+            await fetch(
+              `${API_BASE_URL}/requesters/assigned-requests`,
+              {
+                method: "GET",
+                headers: {
+                  Authorization:
+                    `Bearer ${token}`,
+                  Accept:
+                    "application/json",
+                },
+              }
+            );
+
+          const data =
+            await response.json();
+
+          if (!response.ok) {
+            throw new Error(
+              data?.error ||
+              "Failed to fetch assigned requests"
+            );
+          }
+
+          const assignedRequests =
+            Array.isArray(data)
+              ? data
+              : Array.isArray(
+                data?.requests
+              )
+                ? data.requests
+                : [];
+
+          if (
+            componentMountedRef.current
+          ) {
+
+            setRequests(
+              assignedRequests
+            );
+
+            setError("");
+          }
+        } catch (fetchError) {
+          console.error(
+            "[ASSIGNED REQUESTS] Refresh error:",
+            fetchError
+          );
+
+          if (
+            componentMountedRef.current
+          ) {
+
+            setError(
+              fetchError.message
+            );
+          }
+        } finally {
+          requestInProgressRef.current =
+            false;
+
+          if (
+            componentMountedRef.current
+          ) {
+            setLoading(false);
+          }
+
+          const shouldRefreshAgain =
+            refreshQueuedRef.current;
+
+          refreshQueuedRef.current =
+            false;
+
+          if (
+            shouldRefreshAgain &&
+            componentMountedRef.current
+          ) {
+            window.setTimeout(
+              () => {
+                fetchAssignedRequests({
+                  showLoader: false,
+                });
+              },
+              0
+            );
+          }
+        }
+      },
+      [accessToken]
+    );
+
+  useEffect(() => {
+    if (!accessToken) {
+      setLoading(false);
+
+      return undefined;
+    }
+
+    /*
+     * Initial page load.
+     */
+    fetchAssignedRequests({
+      showLoader: true,
+    });
+
+    /*
+     * A notification update is now the primary
+     * trigger for external donation decisions.
+     */
+    const handleDonorUpdate =
+      () => {
+        fetchAssignedRequests({
+          showLoader: false,
+        });
+      };
+
+    /*
+     * Refresh when returning to the browser,
+     * in case notification polling was paused
+     * while the page was in the background.
+     */
+    const handleWindowFocus =
+      () => {
+        fetchAssignedRequests({
+          showLoader: false,
+        });
+      };
+
+    window.addEventListener(
+      "donor-notifications-updated",
+      handleDonorUpdate
+    );
+
+    window.addEventListener(
+      "donor-assignment-updated",
+      handleDonorUpdate
+    );
+
+    window.addEventListener(
+      "focus",
+      handleWindowFocus
+    );
+
+    return () => {
+      window.removeEventListener(
+        "donor-notifications-updated",
+        handleDonorUpdate
       );
 
-      if (!response.ok) {
-        throw new Error(
-          response.status === 404
-            ? "No assigned requests found"
-            : "Failed to fetch assigned requests"
-        );
-      }
+      window.removeEventListener(
+        "donor-assignment-updated",
+        handleDonorUpdate
+      );
 
-      const data = await response.json();
-
-      const assignedRequests = Array.isArray(data)
-        ? data
-        : data.requests || [];
-
-      setRequests(assignedRequests);
-    } catch (err) {
-      console.error("Error fetching assigned requests:", err);
-      setError(err.message);
-      setRequests([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+      window.removeEventListener(
+        "focus",
+        handleWindowFocus
+      );
+    };
+  }, [accessToken, fetchAssignedRequests,]);
 
   const handleCompleteDonation = async (request) => {
     const requestId = request?._id;
@@ -257,7 +401,9 @@ export const AssignedRequests = () => {
         )
       );
 
-      await fetchAssignedRequests();
+      await fetchAssignedRequests({
+        showLoader: false,
+      });
     } catch (err) {
       console.error(
         "[ASSIGNED REQUESTS] Confirm donation error:",
@@ -271,6 +417,8 @@ export const AssignedRequests = () => {
   };
 
   const handleCancelAssignment = async (requestId) => {
+    setError("");
+    setSuccess("");
     if (!window.confirm(
       language === "ar"
         ? "هل تريد إلغاء التعيين؟"
@@ -300,17 +448,33 @@ export const AssignedRequests = () => {
         const errorData = await response.json();
         throw new Error(errorData.error || "Failed to cancel assignment");
       }
-
       setSuccess(
-        language === "ar"
-          ? "✓ تم إلغاء التعيين بنجاح"
-          : "✓ Assignment cancelled successfully"
+        t(
+          "assignmentCancelledSuccessfully"
+        )
       );
 
-      // Refresh the requests list
-      await fetchAssignedRequests();
+      setRequests(
+        (currentRequests) =>
+          currentRequests.filter(
+            (request) =>
+              request._id !==
+              requestId
+          )
+      );
 
-      setTimeout(() => setSuccess(""), 5000);
+      window.dispatchEvent(
+        new CustomEvent(
+          "donor-assignment-updated"
+        )
+      );
+
+      window.setTimeout(
+        () => {
+          setSuccess("");
+        },
+        5000
+      );
     } catch (err) {
       setError(err.message);
     } finally {
@@ -318,7 +482,10 @@ export const AssignedRequests = () => {
     }
   };
 
-  if (loading) {
+  if (
+    loading &&
+    requests.length === 0
+  ) {
     return (
       <div className="flex justify-center items-center py-12">
         <div className="text-slate-600">
@@ -471,18 +638,6 @@ export const AssignedRequests = () => {
                     {language === "ar" ? "الملاحظات" : "Notes"}
                   </p>
                   <p className="text-slate-700">{request.description}</p>
-                </div>
-              )}
-
-              {request.description && (
-                <div className="px-4 py-3 border-t border-slate-200 bg-white">
-                  <p className="text-xs text-slate-600 mb-1">
-                    {language === "ar" ? "الملاحظات" : "Notes"}
-                  </p>
-
-                  <p className="text-slate-700">
-                    {request.description}
-                  </p>
                 </div>
               )}
 

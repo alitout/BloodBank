@@ -125,12 +125,14 @@ const createDonation = async (
             });
 
         if (existingDonation) {
-            /*
-             * A rejected confirmation may be
-             * opened again for resubmission.
-             */
+
             if (
-                existingDonation.status === "rejected"
+                [
+                    "rejected",
+                    "cancelled",
+                ].includes(
+                    existingDonation.status
+                )
             ) {
                 existingDonation.status = "pending_confirmation";
                 existingDonation.unitsAssigned = donorAssignment.unitsAssigned;

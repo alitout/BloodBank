@@ -144,6 +144,8 @@ export const RequestsList = () => {
       setShowUnitsModal(false);
       setSelectedRequestForUnits(null);
       setUnitsToAssign(1);
+      window.dispatchEvent(new CustomEvent("donor-assignment-updated"));
+      navigate("/dashboard?tab=assigned", { replace: true, });
     } catch (err) {
       alert(`${t("error")}: ${err.message}`);
       console.error("Error assigning self:", err);

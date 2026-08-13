@@ -151,34 +151,58 @@ export const AuthProvider = ({ children, }) => {
       );
   }, []);
 
-  const logout = useCallback(() => {
+  const logout =
+    useCallback(() => {
+      console.log(
+        "[AUTH] User logged out"
+      );
 
-    if (getAccessToken()) {
-      authAPI
-        .logoutUser()
-        .catch((logoutError) => {
-          console.warn(
-            '[AUTH] Server logout failed:',
-            logoutError
+      let storedUser = user;
+
+      if (!storedUser) {
+        try {
+          storedUser = JSON.parse(
+            sessionStorage.getItem("user") ||
+            localStorage.getItem("user") ||
+            "null"
           );
-        });
-    }
+        } catch {
+          storedUser = null;
+        }
+      }
 
-    console.log("[AUTH] User logged out");
+      if (storedUser?.uid) {
+        sessionStorage.removeItem(
+          `donorIntent:${storedUser.uid}`
+        );
+      }
 
-    setUser(null);
-    setAccessToken(null);
-    setRefreshToken(null);
-    setError(null);
+      if (getAccessToken()) {
+        authAPI
+          .logoutUser()
+          .catch(
+            (logoutError) => {
+              console.warn(
+                "[AUTH] Server logout failed:",
+                logoutError
+              );
+            }
+          );
+      }
 
-    clearStorage(
-      sessionStorage
-    );
+      setUser(null);
+      setAccessToken(null);
+      setRefreshToken(null);
+      setError(null);
 
-    clearStorage(
-      localStorage
-    );
-  }, []);
+      clearStorage(
+        sessionStorage
+      );
+
+      clearStorage(
+        localStorage
+      );
+    }, [user]);
 
   const refreshUserProfile =
     useCallback(async () => {

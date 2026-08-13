@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import { useLanguage } from "./LanguageContext.jsx";
 import { useAuth } from "./AuthContext.jsx";
 import { useDataCache } from "./DataCacheContext.jsx";
-import { Clock, CheckCircle, Trash2 } from "lucide-react";
+import { Clock, CheckCircle } from "lucide-react";
 import { authAPI, API_BASE_URL, getAccessToken } from "../utils/api.js";
 import { useLocation } from "react-router-dom";
 import { AdminProfileRequestsTab } from "./AdminProfileRequestsTab.jsx";
 import AdminDonationApprovals from "./AdminDonationApprovals.jsx";
 
-export const PendingVerification = ({ user }) => {
+export const PendingVerification = () => {
   const { t, language } = useLanguage();
   const { user: authUser, accessToken } = useAuth();
   const [error, setError] = useState("");
@@ -20,55 +20,59 @@ export const PendingVerification = ({ user }) => {
   const location = useLocation();
 
   const [pendingCounts, setPendingCounts] = useState({ profileRequests: 0, donations: 0 });
+  const [countsLoading, setCountsLoading,] = useState(true);
 
-  const fetchPendingCounts = async () => {
-    const token = getAccessToken();
+  useEffect(() => {
+    if (!accessToken) {
+      setCountsLoading(false);
 
-    if (!token) {
-      return;
+      return undefined;
     }
+  }, [accessToken,]);
 
-    try {
-      const [profileResponse, donationResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/auth/profile-requests`, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }),
-        fetch(`${API_BASE_URL}/donations/admin/pending`, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        })
-      ]);
+  const handleProfileCountChange =
+    useCallback(
+      (count) => {
+        setPendingCounts(
+          (currentCounts) => ({
+            ...currentCounts,
+            profileRequests:
+              count,
+          })
+        );
 
-      const profileData = profileResponse.ok
-        ? await profileResponse.json()
-        : [];
+        setCountsLoading(
+          (currentLoading) => ({
+            ...currentLoading,
+            profileRequests:
+              false,
+          })
+        );
+      },
+      []
+    );
 
-      const donationData = donationResponse.ok
-        ? await donationResponse.json()
-        : [];
+  const handleDonationCountChange =
+    useCallback(
+      (count) => {
+        setPendingCounts(
+          (currentCounts) => ({
+            ...currentCounts,
+            donations:
+              count,
+          })
+        );
 
-      const donations = Array.isArray(donationData)
-        ? donationData
-        : donationData?.donations || [];
-
-      setPendingCounts({
-        profileRequests: Array.isArray(profileData)
-          ? profileData.filter(
-            (request) => request.status === "pending"
-          ).length
-          : 0,
-        donations: donations.length
-      });
-    } catch (error) {
-      console.error(
-        "[ADMIN PENDING] Failed to load counts:",
-        error
-      );
-    }
-  };
+        setCountsLoading(
+          (currentLoading) => ({
+            ...currentLoading,
+            donations:
+              false,
+          })
+        );
+      },
+      []
+    );
 
   const fetchPendingUsers = async () => {
     try {
@@ -236,7 +240,7 @@ export const PendingVerification = ({ user }) => {
               : "Profile Requests"}
           </p>
           <p className="mt-2 text-3xl font-bold text-purple-900">
-            {pendingCounts.profileRequests}
+            {countsLoading.profileRequests ? "…" : pendingCounts.profileRequests}
           </p>
         </a>
 
@@ -250,7 +254,7 @@ export const PendingVerification = ({ user }) => {
               : "Donation Confirmations"}
           </p>
           <p className="mt-2 text-3xl font-bold text-red-900">
-            {pendingCounts.donations}
+            {countsLoading.donations ? "…" : pendingCounts.donations}
           </p>
         </a>
 
@@ -268,17 +272,18 @@ export const PendingVerification = ({ user }) => {
           </p>
         </a>
       </div>
+
       <section
         id="profile-requests"
         className="scroll-mt-24 rounded-lg border border-slate-200 bg-white p-4"
       >
         <h3 className="mb-4 text-lg font-bold text-slate-900">
           {language === "ar"
-            ? `طلبات الملف الشخصي (${pendingCounts.profileRequests})`
-            : `Profile Requests (${pendingCounts.profileRequests})`}
+            ? `طلبات الملف الشخصي (${countsLoading.profileRequests ? "…" : pendingCounts.profileRequests})`
+            : `Profile Requests (${countsLoading.profileRequests ? "…" : pendingCounts.profileRequests})`}
         </h3>
 
-        <AdminProfileRequestsTab pendingOnly />
+        <AdminProfileRequestsTab pendingOnly onPendingCountChange={handleProfileCountChange} />
       </section>
 
       <section
@@ -287,11 +292,11 @@ export const PendingVerification = ({ user }) => {
       >
         <h3 className="mb-4 text-lg font-bold text-slate-900">
           {language === "ar"
-            ? `تأكيدات التبرع (${pendingCounts.donations})`
-            : `Donation Confirmations (${pendingCounts.donations})`}
+            ? `تأكيدات التبرع (${countsLoading.donations ? "…" : pendingCounts.donations})`
+            : `Donation Confirmations (${countsLoading.donations ? "…" : pendingCounts.donations})`}
         </h3>
 
-        <AdminDonationApprovals />
+        <AdminDonationApprovals onPendingCountChange={handleDonationCountChange} />
       </section>
       <section
         id="profile-verifications"

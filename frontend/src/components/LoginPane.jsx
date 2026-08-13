@@ -1,15 +1,17 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "./AuthContext.jsx";
 import { useLanguage } from "./LanguageContext.jsx";
 import { useDataCache } from "./DataCacheContext.jsx";
 import { Mail, KeyRound, CheckCircle, ShieldAlert, Eye, EyeOff, AlertCircle } from "lucide-react";
+import { getDonorIntent, getDonorIntentDestination, } from "../utils/donorIntent.js";
 
 export const LoginPane = ({ onSuccess }) => {
   const navigate = useNavigate();
   const { login } = useAuth();
   const { prefetchData } = useDataCache();
   const { t, language } = useLanguage();
+  const submissionLocked = useRef(false);
 
   const [emailOrPhone, setEmailOrPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -22,6 +24,10 @@ export const LoginPane = ({ onSuccess }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submissionLocked.current) {
+      return;
+    }
+    submissionLocked.current = true;
     setErrorMsg("");
     setSuccessMsg("");
     setWarningMsg("");
@@ -59,38 +65,70 @@ export const LoginPane = ({ onSuccess }) => {
         // Check verification status and user role
         const user = JSON.parse(sessionStorage.getItem('user') || localStorage.getItem('user') || '{}');
         const accessToken = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
-        
+
         // Prefetch data based on user role
         if (user && accessToken) {
-          await prefetchData(user, accessToken);
+          try {
+            await prefetchData(
+              user,
+              accessToken
+            );
+          } catch (prefetchError) {
+            console.warn(
+              "[LOGIN] Data prefetch failed:",
+              prefetchError
+            );
+          }
         }
 
-        let hasWarning = false;
-        let redirectPath = "/dashboard";
-        
+        let redirectPath = "/dashboard?tab=seek-blood";
+
         // Redirect admin users to /admin page
-        if (user.role === 'super_admin') {
+        if (user.role === "super_admin") {
+
           redirectPath = "/admin";
           setSuccessMsg(t("loginSuccessful"));
-        } else if (user.role === 'donor' && !user.verifiedByAdmin) {
-          hasWarning = true;
-          setWarningMsg(t("accountPendingVerification"));
+
+        } else if (user.role === "donor") {
+          const rememberedIntent =
+            getDonorIntent(user.uid);
+
+          redirectPath = rememberedIntent ? getDonorIntentDestination(rememberedIntent) : "/donor-intent";
+
+          if (!user.verifiedByAdmin) {
+            setWarningMsg(t("accountPendingVerification"));
+          } else {
+            setSuccessMsg(t("loginSuccessful"));
+          }
         } else {
           setSuccessMsg(t("loginSuccessful"));
         }
+
         // Navigate to appropriate page after a short delay
-        const delay = hasWarning ? 2500 : 1500;
-        setTimeout(() => {
-          if (onSuccess) onSuccess();
-          navigate(redirectPath);
-        }, delay);
+        if (onSuccess) {
+          onSuccess();
+        }
+
+        navigate(
+          redirectPath,
+          {
+            replace: true,
+          }
+        );
+
+        return;
       } else {
-        setErrorMsg(result.message);
+        if (!result.success) {
+          submissionLocked.current = false;
+          setIsSubmitting(false);
+          setErrorMsg(result.message);
+          return;
+        }
       }
-    } catch (err) {
-      setErrorMsg(err.message || t("anErrorOccurred"));
-    } finally {
+    } catch (error) {
+      submissionLocked.current = false;
       setIsSubmitting(false);
+      setErrorMsg(error.message || t("anErrorOccurred"));
     }
   };
 

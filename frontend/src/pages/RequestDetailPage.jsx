@@ -6,6 +6,7 @@ import { API_BASE_URL, getAccessToken } from "../utils/api.js";
 import { Heart, ArrowLeft, Loader, AlertCircle, MapPin, Droplet, Users, Check } from "lucide-react";
 import { getConnectionBlockReason, getWaitingPeriodInformation } from "../utils/connectionAssessment.js";
 import { formatDateDDMMYYYY, } from "../utils/dateFormat.js";
+import { SignOutButton, } from "../components/SignOutButton.jsx";
 
 export const RequestDetailPage =
   () => {
@@ -321,37 +322,17 @@ export const RequestDetailPage =
         }
 
         setAssigned(true);
-
-        setShowUnitsModal(
-          false
-        );
-
-        window.alert(
-          t(
-            "donorAssignSuccess"
-          ) ||
-          "Successfully assigned to request!"
-        );
-
-        /*
-         * Get current profile again in case
-         * backend changed donor information.
-         */
-        if (
-          typeof refreshUserProfile ===
-          "function"
-        ) {
+        setShowUnitsModal(false);
+        window.alert(t("donorAssignSuccess"));
+        if (typeof refreshUserProfile === "function") {
           await refreshUserProfile();
         }
-
-        window.setTimeout(
-          () => {
-            navigate(
-              "/donor-portal"
-            );
-          },
-          1000
+        window.dispatchEvent(
+          new CustomEvent(
+            "donor-assignment-updated"
+          )
         );
+        navigate("/dashboard?tab=assigned", { replace: true, });
       } catch (
       assignmentError
       ) {
@@ -386,21 +367,26 @@ export const RequestDetailPage =
       return (
         <div className="min-h-screen bg-gray-50 p-4">
           <div className="mx-auto max-w-2xl">
-            <button
-              type="button"
-              onClick={() =>
-                navigate(-1)
-              }
-              className="mb-4 flex items-center gap-2 text-blue-600 hover:text-blue-700"
-            >
-              <ArrowLeft
-                size={20}
-              />
+            <div className="mb-6 flex items-center justify-between gap-4">
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(
+                    "/dashboard?tab=requests",
+                    {
+                      replace: true,
+                    }
+                  )
+                }
+                className="flex items-center gap-2 font-semibold text-blue-600 hover:text-blue-700"
+              >
+                <ArrowLeft size={20} />
 
-              {language === "ar"
-                ? "العودة"
-                : "Back"}
-            </button>
+                {t("back")}
+              </button>
+
+              <SignOutButton />
+            </div>
 
             <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-6">
               <AlertCircle
@@ -430,21 +416,26 @@ export const RequestDetailPage =
     return (
       <div className="min-h-screen bg-gray-50 p-4">
         <div className="mx-auto max-w-2xl">
-          <button
-            type="button"
-            onClick={() =>
-              navigate(-1)
-            }
-            className="mb-6 flex items-center gap-2 font-semibold text-blue-600 hover:text-blue-700"
-          >
-            <ArrowLeft
-              size={20}
-            />
+          <div className="mb-6 flex items-center justify-between gap-4">
+            <button
+              type="button"
+              onClick={() =>
+                navigate(
+                  "/dashboard?tab=requests",
+                  {
+                    replace: true,
+                  }
+                )
+              }
+              className="flex items-center gap-2 font-semibold text-blue-600 hover:text-blue-700"
+            >
+              <ArrowLeft size={20} />
 
-            {language === "ar"
-              ? "العودة"
-              : "Back"}
-          </button>
+              {t("back")}
+            </button>
+
+            <SignOutButton />
+          </div>
 
           {/* Cooldown */}
           {showWaitingPeriod && (

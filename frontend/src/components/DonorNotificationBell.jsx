@@ -1,18 +1,22 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Bell, X, CheckCircle } from "lucide-react";
-import { useAuth } from "./AuthContext.jsx";
 import { useLanguage } from "./LanguageContext.jsx";
 import { useNavigate } from "react-router-dom";
-import { useDonorNotifications } from "../hooks/useDonorNotifications.js";
 
-export const DonorNotificationBell = ({ isMobilePanel = false }) => {
-  const { accessToken } = useAuth();
+export const DonorNotificationBell = ({ isMobilePanel = false, notificationData }) => {
   const { language } = useLanguage();
   const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(isMobilePanel);
   const [activeTab, setActiveTab] = useState("unread");
   const bellRef = useRef(null);
-  const { notifications, unreadCount, loading, markAsRead } = useDonorNotifications(accessToken);
+  const {
+    notifications = [],
+    unreadCount = 0,
+    loading = false,
+    error = null,
+    markAsRead =
+    async () => false,
+  } = notificationData || {};
 
   // Close on click outside (skip for mobile panel)
   useEffect(() => {
@@ -96,7 +100,7 @@ export const DonorNotificationBell = ({ isMobilePanel = false }) => {
             </div>
 
             {/* Tabs */}
-            {!loading && notifications.length > 0 && (
+            {notifications.length > 0 && (
               <div className="flex gap-0 border-b border-slate-200 bg-white px-2 pt-2">
                 <button
                   onClick={() => setActiveTab("unread")}
@@ -119,8 +123,15 @@ export const DonorNotificationBell = ({ isMobilePanel = false }) => {
               </div>
             )}
 
+            {error && (
+              <div className="border-b border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {error}
+              </div>
+            )}
+
             {/* Notifications List */}
-            {loading ? (
+            {loading &&
+              notifications.length === 0 ? (
               <div className="p-4 text-center text-slate-500">
                 {language === "ar" ? "جاري التحميل..." : "Loading..."}
               </div>

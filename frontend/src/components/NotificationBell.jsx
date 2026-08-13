@@ -5,189 +5,30 @@ import { useLanguage } from "./LanguageContext.jsx";
 import { useAuth } from "./AuthContext.jsx";
 import { API_BASE_URL, getAccessToken, } from "../utils/api.js";
 
-export const NotificationBell = ({ isMobilePanel = false, }) => {
+export const NotificationBell = ({ isMobilePanel = false, notificationData }) => {
   const { language } = useLanguage();
   const { accessToken } = useAuth();
-
-  const [pendingAccounts, setPendingAccounts] = useState([]);
-  const [pendingDonations, setPendingDonations,] = useState([]);
-  const [pendingProfileRequests, setPendingProfileRequests] = useState([]);
   const [showDropdown, setShowDropdown] = useState(isMobilePanel);
   const [processingId, setProcessingId] = useState(null);
   const [error, setError] = useState("");
   const dropdownRef = useRef(null);
-  const pendingCount = pendingAccounts.length + pendingDonations.length + pendingProfileRequests.length;
+
+  const {
+    pendingAccounts = [],
+    pendingDonations = [],
+    pendingProfileRequests = [],
+    pendingCount = 0,
+    loading = false,
+    error:
+    dataError = "",
+    refetch,
+    removePendingAccount,
+    removePendingDonation,
+  } = notificationData || {};
+
+  const [actionError, setActionError,] = useState("");
 
   const navigate = useNavigate();
-
-  const fetchPendingData = useCallback(async () => {
-    const token = getAccessToken() || accessToken;
-
-    if (!token) {
-      return;
-    }
-    try {
-      setError("");
-
-      const [
-        accountsResponse,
-        donationsResponse,
-        profileRequestsResponse
-      ] = await Promise.all([
-        fetch(
-          `${API_BASE_URL}/auth/admin/accounts`,
-          {
-            method: "GET",
-            headers: {
-              Authorization:
-                `Bearer ${token}`,
-              Accept:
-                "application/json"
-            }
-          }
-        ),
-
-        fetch(
-          `${API_BASE_URL}/donations/admin/pending`,
-          {
-            method: "GET",
-            headers: {
-              Authorization:
-                `Bearer ${token}`,
-              Accept:
-                "application/json"
-            }
-          }
-        ),
-
-        fetch(
-          `${API_BASE_URL}/auth/profile-requests`,
-          {
-            method: "GET",
-            headers: {
-              Authorization:
-                `Bearer ${token}`,
-              Accept:
-                "application/json"
-            }
-          }
-        )
-      ]);
-
-      /*
-       * Pending account verification
-       */
-      if (accountsResponse.ok) {
-        const accountsData =
-          await accountsResponse.json();
-
-        const unverifiedAccounts =
-          Array.isArray(accountsData)
-            ? accountsData.filter(
-              (account) =>
-                !account.verifiedByAdmin
-            )
-            : [];
-
-        setPendingAccounts(
-          unverifiedAccounts
-        );
-      }
-
-      /*
-       * Pending donation confirmations
-       */
-      if (donationsResponse.ok) {
-        const donationsData =
-          await donationsResponse.json();
-
-        setPendingDonations(
-          Array.isArray(donationsData)
-            ? donationsData
-            : donationsData.donations ||
-            []
-        );
-      }
-
-      /*
-       * Pending profile update requests
-       */
-      if (
-        profileRequestsResponse.ok
-      ) {
-        const profileData =
-          await profileRequestsResponse.json();
-
-        const pendingProfiles =
-          Array.isArray(profileData)
-            ? profileData.filter(
-              (request) =>
-                request.status ===
-                "pending"
-            )
-            : [];
-
-        setPendingProfileRequests(
-          pendingProfiles
-        );
-      }
-
-      if (
-        !accountsResponse.ok &&
-        !donationsResponse.ok &&
-        !profileRequestsResponse.ok
-      ) {
-        throw new Error(
-          language === "ar"
-            ? "تعذر تحميل الإشعارات."
-            : "Failed to load notifications."
-        );
-      }
-    } catch (fetchError) {
-      console.error(
-        "[NOTIFICATION BELL] Fetch error:",
-        fetchError
-      );
-
-      setError(fetchError.message);
-    }
-  }, [accessToken, language]);
-
-  useEffect(() => {
-    if (!accessToken) {
-      return undefined;
-    }
-
-    fetchPendingData();
-
-    const intervalId =
-      window.setInterval(
-        fetchPendingData,
-        10000
-      );
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [accessToken, fetchPendingData,]);
-
-  useEffect(() => {
-    const handlePendingUpdate = () => {
-      fetchPendingData();
-    };
-
-    window.addEventListener(
-      "admin-pending-updated",
-      handlePendingUpdate
-    );
-
-    return () => {
-      window.removeEventListener(
-        "admin-pending-updated",
-        handlePendingUpdate
-      );
-    };
-  }, [fetchPendingData]);
 
   useEffect(() => {
     if (isMobilePanel) {
@@ -229,7 +70,7 @@ export const NotificationBell = ({ isMobilePanel = false, }) => {
     async (uid) => {
       try {
         setProcessingId(uid);
-        setError("");
+        setActionError("");
 
         const token =
           getAccessToken() ||
@@ -267,15 +108,11 @@ export const NotificationBell = ({ isMobilePanel = false, }) => {
           );
         }
 
-        setPendingAccounts(
-          (currentAccounts) =>
-            currentAccounts.filter(
-              (account) =>
-                account.uid !== uid
-            )
-        );
+        removePendingAccount?.(uid);
+        await refetch?.();
+
       } catch (verifyError) {
-        setError(
+        setActionError(
           verifyError.message
         );
       } finally {
@@ -301,7 +138,7 @@ export const NotificationBell = ({ isMobilePanel = false, }) => {
           donationId
         );
 
-        setError("");
+        setActionError("");
 
         const token =
           getAccessToken() ||
@@ -338,14 +175,8 @@ export const NotificationBell = ({ isMobilePanel = false, }) => {
           );
         }
 
-        setPendingDonations(
-          (currentDonations) =>
-            currentDonations.filter(
-              (donation) =>
-                donation.donationId !==
-                donationId
-            )
-        );
+        removePendingDonation?.(donationId);
+        await refetch?.();
 
         window.dispatchEvent(
           new CustomEvent(
@@ -358,7 +189,7 @@ export const NotificationBell = ({ isMobilePanel = false, }) => {
           approveError
         );
 
-        setError(
+        setActionError(
           approveError.message
         );
       } finally {
@@ -385,7 +216,7 @@ export const NotificationBell = ({ isMobilePanel = false, }) => {
         rejectionReason.trim();
 
       if (!trimmedReason) {
-        setError(
+        setActionError(
           language === "ar"
             ? "سبب الرفض مطلوب."
             : "A rejection reason is required."
@@ -399,7 +230,7 @@ export const NotificationBell = ({ isMobilePanel = false, }) => {
           donationId
         );
 
-        setError("");
+        setActionError("");
 
         const token =
           getAccessToken() ||
@@ -440,15 +271,8 @@ export const NotificationBell = ({ isMobilePanel = false, }) => {
           );
         }
 
-        setPendingDonations(
-          (currentDonations) =>
-            currentDonations.filter(
-              (donation) =>
-                donation.donationId !==
-                donationId
-            )
-        );
-
+        removePendingDonation?.(donationId);
+        await refetch?.();
         window.dispatchEvent(
           new CustomEvent(
             "pending-donations-updated"
@@ -460,7 +284,7 @@ export const NotificationBell = ({ isMobilePanel = false, }) => {
           rejectError
         );
 
-        setError(
+        setActionError(
           rejectError.message
         );
       } finally {
@@ -474,17 +298,6 @@ export const NotificationBell = ({ isMobilePanel = false, }) => {
     localStorage.setItem(
       "adminActiveTab",
       "pending"
-    );
-
-    window.dispatchEvent(
-      new CustomEvent(
-        "adminTabChange",
-        {
-          detail: {
-            tabId: "pending"
-          }
-        }
-      )
     );
 
     navigate(
@@ -552,9 +365,9 @@ export const NotificationBell = ({ isMobilePanel = false, }) => {
             </p>
           </div>
 
-          {error && (
+          {(actionError || dataError) && (
             <div className="border-b border-red-200 bg-red-50 p-3 text-sm text-red-700">
-              {error}
+              {actionError || dataError}
             </div>
           )}
 
