@@ -5,13 +5,14 @@ import { useDB } from "./DBContext.jsx";
 import { useDataCache } from "./DataCacheContext.jsx";
 import { API_BASE_URL, getAccessToken } from "../utils/api.js";
 import { useNavigate } from "react-router-dom";
-import { Heart, Loader, AlertCircle, Check, Droplet, MapPin, Users, Search, Filter, Lock, Eye } from "lucide-react";
+import { Heart, Loader, AlertCircle, Check, Droplet, MapPin, Users, Search, Filter, Lock, Eye, Phone } from "lucide-react";
 import { getConnectionBlockReason, getWaitingPeriodInformation } from "../utils/connectionAssessment.js";
+import { Truck01, } from "@untitledui/icons";
 
 export const RequestsList = () => {
   const { t, language } = useLanguage();
   const { accessToken, user, refreshUserProfile } = useAuth();
-  const { requesters } = useDB();
+  const { requesters, refreshRequesters } = useDB();
   const { getCachedData } = useDataCache();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -24,7 +25,49 @@ export const RequestsList = () => {
   const [showOnlyCorrespondent, setShowOnlyCorrespondent] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [bloodTypeFilter, setBloodTypeFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+
+  useEffect(() => {
+    if (
+      typeof refreshRequesters !==
+      "function"
+    ) {
+      return undefined;
+    }
+
+    const intervalId =
+      window.setInterval(
+        () => {
+          refreshRequesters();
+        },
+        10000
+      );
+
+    const handleVisibility =
+      () => {
+        if (
+          document.visibilityState ===
+          "visible"
+        ) {
+          refreshRequesters();
+        }
+      };
+
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibility
+    );
+
+    return () => {
+      window.clearInterval(
+        intervalId
+      );
+
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibility
+      );
+    };
+  }, [refreshRequesters]);
 
   // Check cache first and load initial data
   useEffect(() => {
@@ -70,19 +113,14 @@ export const RequestsList = () => {
       bloodTypeFilter === "all" || bloodType === bloodTypeFilter;
 
     // Only show active (pending) requests to users
-    const matchesStatus =
-      statusFilter === "all" ? status === "pending" : status === statusFilter;
-
-    // const matchesCorrespondent =
-    //   !showOnlyCorrespondent ||
-    //   isCompatibleDonor(bloodType, user?.bloodType || "");
+    const isActiveRequest = status === "pending";
     const matchesCorrespondent = !showOnlyCorrespondent || req.connectionAssessment?.compatible === true;
 
     // Check if request has available units
     const totalAssigned = req.assignedDonors?.reduce((sum, d) => sum + d.unitsAssigned, 0) || 0;
     const hasAvailableUnits = totalAssigned < req.unitsNeeded;
 
-    return matchesSearch && matchesBloodType && matchesStatus && matchesCorrespondent && hasAvailableUnits;
+    return matchesSearch && matchesBloodType && isActiveRequest && matchesCorrespondent && hasAvailableUnits;
   });
 
   const getStatusColor = (status) => {
@@ -238,7 +276,7 @@ export const RequestsList = () => {
         </div>
 
         {/* Filter Row */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <select
             value={bloodTypeFilter}
             onChange={(e) => setBloodTypeFilter(e.target.value)}
@@ -253,17 +291,6 @@ export const RequestsList = () => {
             <option value="B-">B-</option>
             <option value="AB+">AB+</option>
             <option value="AB-">AB-</option>
-          </select>
-
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-red-600"
-          >
-            <option value="all">{t("status")} - {t("all")}</option>
-            <option value="pending">{t("pending")}</option>
-            <option value="fulfilled">{t("fulfilled")}</option>
-            <option value="cancelled">{t("cancelled")}</option>
           </select>
 
           <label className="flex items-center gap-2 p-2 border border-slate-300 rounded-lg cursor-pointer hover:bg-slate-50">
@@ -389,6 +416,65 @@ export const RequestsList = () => {
                     {req.description}
                   </p>
                 )}
+
+                <div
+                  className={`mb-3 flex items-center gap-2 rounded-lg border p-3 ${req.transportationAvailable ===
+                    true
+                    ? "border-red-200 bg-red-50 text-red-700"
+                    : "border-slate-200 bg-slate-50 text-slate-600"
+                    }`}
+                >
+                  <Truck01
+                    className="h-5 w-5 shrink-0"
+                    aria-hidden="true"
+                  />
+
+                  <div>
+                    <p className="text-xs font-semibold">
+                      {t(
+                        "transportationAvailability"
+                      )}
+                    </p>
+
+                    <p className="mt-0.5 text-xs">
+                      {req.transportationAvailable ===
+                        true
+                        ? t(
+                          "transportationAvailable"
+                        )
+                        : t(
+                          "transportationNotAvailable"
+                        )}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mb-3 rounded-lg border border-slate-200 bg-white p-3">
+                  <p className="mb-2 text-xs font-semibold text-slate-700">
+                    {t(
+                      "requesterContactInformation"
+                    )}
+                  </p>
+
+                  <div className="space-y-1 text-xs text-slate-600">
+                    <a
+                      href={
+                        req.requesterContact
+                          ?.phone
+                          ? `tel:${req.requesterContact.phone}`
+                          : undefined
+                      }
+                      className="flex items-center gap-2 hover:text-red-600"
+                    >
+                      <Phone className="h-4 w-4" />
+
+                      {req.requesterContact
+                        ?.phone ||
+                        t("notProvided")}
+                    </a>
+
+                  </div>
+                </div>
 
                 {/* Request-specific waiting period */}
                 {waitingPeriod.active && (

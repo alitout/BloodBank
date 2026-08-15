@@ -3,73 +3,230 @@ import { useLanguage } from "./LanguageContext.jsx";
 import { useAuth } from "./AuthContext.jsx";
 import { useDB } from "./DBContext.jsx";
 import { Send, AlertCircle } from "lucide-react";
+import { Truck01, } from "@untitledui/icons";
 
+const getTodayISO = () => {
+  const now =
+    new Date();
+
+  const localDate =
+    new Date(
+      now.getTime() -
+      now.getTimezoneOffset() *
+      60 *
+      1000
+    );
+
+  return localDate
+    .toISOString()
+    .split("T")[0];
+};
+
+const createInitialFormData = () => ({
+  fname: "",
+  fatherName: "",
+  lname: "",
+  bloodGenre: "whole_blood",
+  bloodType: "O+",
+  hospitalSelectionType: "registered",
+  hospitalId: "",
+  customHospitalName: "",
+  customHospitalAddress: "",
+  transportationAvailable: false,
+  transportationAvailable: false,
+  unitsNeeded: "",
+  date: getTodayISO(),
+  description: "",
+  relationToPatient: "",
+});
 export const NewRequestForm = ({ onSuccess }) => {
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const { user } = useAuth();
   const { hospitals, addRequester } = useDB();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [formData, setFormData] = useState({
-    fname: "",
-    fatherName: "",
-    lname: "",
-    bloodGenre: "whole_blood",
-    bloodType: "O+",
-    hospital: "",
-    unitsNeeded: 1,
-    date: new Date().toISOString().split('T')[0],
-    description: "",
-    relationToPatient: ""
-  });
+  const [formData, setFormData,] = useState(createInitialFormData);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+  const handleChange = (event) => {
+    const { name, value, } = event.target;
+
+    setFormData((previous) => ({ ...previous, [name]: value, }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-    setSuccess("");
+  const handleHospitalChange =
+    (event) => {
+      const value =
+        event.target.value;
 
-    try {
-      await addRequester(
-        formData.fname,
-        formData.fatherName,
-        formData.lname,
-        formData.bloodGenre,
-        formData.bloodType,
-        formData.hospital,
-        parseInt(formData.unitsNeeded),
-        formData.date,
-        formData.description,
-        formData.relationToPatient
+      if (
+        value === "__other__"
+      ) {
+        setFormData(
+          (previous) => ({
+            ...previous,
+
+            hospitalSelectionType:
+              "other",
+
+            hospitalId: "",
+
+            customHospitalName:
+              previous
+                .customHospitalName ??
+              "",
+
+            customHospitalAddress:
+              previous
+                .customHospitalAddress ??
+              "",
+          })
+        );
+
+        return;
+      }
+
+      setFormData(
+        (previous) => ({
+          ...previous,
+
+          hospitalSelectionType:
+            "registered",
+
+          hospitalId: value,
+
+          customHospitalName:
+            "",
+
+          customHospitalAddress:
+            "",
+        })
       );
-      
-      setSuccess(t("successMsg"));
-      setFormData({
-        fname: "",
-        fatherName: "",
-        lname: "",
-        bloodGenre: "whole_blood",
-        bloodType: "O+",
-        hospital: "",
-        unitsNeeded: 1,
-        date: new Date().toISOString().split('T')[0],
-        description: "",
-        relationToPatient: ""
-      });
-      
-      if (onSuccess) setTimeout(onSuccess, 1500);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+
+  const hasText = (value) =>
+    typeof value === "string" &&
+    value.trim().length > 0;
+
+  const parsedUnits =
+    Number(formData.unitsNeeded);
+
+  const hasValidUnits =
+    Number.isInteger(parsedUnits) &&
+    parsedUnits >= 1 &&
+    parsedUnits <= 50;
+
+  const hasValidHospital =
+    formData.hospitalSelectionType === "registered" ? hasText(formData.hospitalId) : hasText(formData.customHospitalName) &&
+      formData.customHospitalName.trim().length >= 2 &&
+      hasText(formData.customHospitalAddress) &&
+      formData.customHospitalAddress.trim().length >= 5;
+
+  const isFormComplete =
+    Boolean(user?.verifiedByAdmin) &&
+    hasText(formData.fname) &&
+    hasText(formData.fatherName) &&
+    hasText(formData.lname) &&
+    hasText(formData.bloodGenre) &&
+    hasText(formData.bloodType) &&
+    hasValidHospital &&
+    hasValidUnits &&
+    hasText(formData.date) &&
+    hasText(formData.relationToPatient);
+
+  const handleSubmit =
+    async (event) => {
+      event.preventDefault();
+
+      setError("");
+      setSuccess("");
+
+      const unitsNeeded =
+        Number.parseInt(
+          formData.unitsNeeded,
+          10
+        );
+
+      if (
+        !Number.isInteger(
+          unitsNeeded
+        ) ||
+        unitsNeeded < 1 ||
+        unitsNeeded > 50
+      ) {
+        setError(
+          t("invalidUnitsNeeded")
+        );
+
+        return;
+      }
+
+      if (formData.hospitalSelectionType === "registered" && !formData.hospitalId) {
+        setError(t("registeredHospitalRequired"));
+        return;
+      }
+
+      const customHospitalName = (formData.customHospitalName ?? "").trim();
+      const customHospitalAddress = (formData.customHospitalAddress ?? "").trim();
+
+      if (formData.hospitalSelectionType === "other" && (!customHospitalName || !customHospitalAddress)) {
+        setError(t("customHospitalDetailsRequired"));
+
+        return;
+      }
+
+      try {
+        setLoading(true);
+
+        const requestPayload = {
+          fname: formData.fname.trim(),
+          fatherName: formData.fatherName.trim(),
+          lname: formData.lname.trim(),
+          bloodGenre: formData.bloodGenre,
+          bloodType: formData.bloodType,
+          hospitalSelectionType: formData.hospitalSelectionType,
+          transportationAvailable: formData.transportationAvailable === true,
+          unitsNeeded,
+          date: formData.date,
+          description: formData.description.trim(),
+          relationToPatient: formData.relationToPatient.trim(),
+        };
+
+        if (formData.hospitalSelectionType === "registered") {
+          requestPayload.hospitalId = formData.hospitalId;
+        } else {
+          requestPayload.customHospital =
+          {
+            name:
+              customHospitalName,
+
+            address:
+              customHospitalAddress,
+          };
+        }
+
+        await addRequester(
+          requestPayload
+        );
+
+        setSuccess(t("requestSubmittedForApproval"));
+        setFormData(createInitialFormData());
+
+        if (onSuccess) {
+          window.setTimeout(
+            onSuccess,
+            1500
+          );
+        }
+      } catch (submitError) {
+        setError(
+          submitError.message ||
+          t("requestSubmissionFailed")
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6 max-w-md mx-auto">
@@ -85,7 +242,7 @@ export const NewRequestForm = ({ onSuccess }) => {
               {t("accountNotVerified")}
             </p>
             <p className="text-xs">
-                  {t("accountNotVerifiedDescription")}
+              {t("accountNotVerifiedDescription")}
             </p>
           </div>
         </div>
@@ -104,7 +261,7 @@ export const NewRequestForm = ({ onSuccess }) => {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4" disabled={!user?.verifiedByAdmin}>
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1">
@@ -191,22 +348,114 @@ export const NewRequestForm = ({ onSuccess }) => {
           </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1">
-            {t("hospitalName")}
-          </label>
-          <select
-            name="hospital"
-            value={formData.hospital}
-            onChange={handleChange}
-            required
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-red-600"
-          >
-            <option value="">{t("selectHospital")}</option>
-            {hospitals.map(h => (
-              <option key={h._id || h.id} value={h.name}>{h.name}</option>
-            ))}
-          </select>
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-sm font-semibold text-slate-700">
+              {t("hospitalName")}
+            </label>
+
+            <select
+              value={
+                formData
+                  .hospitalSelectionType ===
+                  "other"
+                  ? "__other__"
+                  : formData.hospitalId
+              }
+              onChange={
+                handleHospitalChange
+              }
+              required
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-red-600 focus:outline-none"
+            >
+              <option value="">
+                {t("selectHospital")}
+              </option>
+
+              {hospitals
+                .filter(
+                  (hospital) =>
+                    hospital?._id ||
+                    hospital?.id
+                )
+                .map(
+                  (hospital) => {
+                    const hospitalIdentifier =
+                      hospital._id ||
+                      hospital.id;
+
+                    return (
+                      <option
+                        key={
+                          hospitalIdentifier
+                        }
+                        value={
+                          hospitalIdentifier
+                        }
+                      >
+                        {hospital.name}
+                      </option>
+                    );
+                  }
+                )}
+
+              <option value="__other__">
+                {t("otherHospital")}
+              </option>
+            </select>
+          </div>
+
+          {formData
+            .hospitalSelectionType ===
+            "other" && (
+              <div className="space-y-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
+
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-slate-700">
+                    {t(
+                      "customHospitalName"
+                    )}
+                  </label>
+
+                  <input
+                    type="text"
+                    name="customHospitalName"
+                    value={formData.customHospitalName ?? ""}
+                    onChange={handleChange}
+                    placeholder={t("customHospitalNamePlaceholder")}
+                    minLength={2}
+                    maxLength={150}
+                    required
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 focus:border-red-600 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-slate-700">
+                    {t(
+                      "customHospitalAddress"
+                    )}
+                  </label>
+
+                  <textarea
+                    name="customHospitalAddress"
+                    value={formData.customHospitalAddress ?? ""}
+                    onChange={handleChange}
+                    placeholder={t("customHospitalAddressPlaceholder")}
+                    minLength={5}
+                    maxLength={300}
+                    rows={3}
+                    required
+                    className="w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2 focus:border-red-600 focus:outline-none"
+                  />
+
+                  <p className="mt-1 text-right text-xs text-slate-500">
+                    {(formData.customHospitalAddress ?? "").length}
+                    /300
+                  </p>
+                </div>
+              </div>
+            )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -217,11 +466,16 @@ export const NewRequestForm = ({ onSuccess }) => {
             <input
               type="number"
               name="unitsNeeded"
-              value={formData.unitsNeeded}
+              value={
+                formData.unitsNeeded
+              }
               onChange={handleChange}
+              placeholder={t("requiredUnitsPlaceholder")}
               min="1"
+              max="50"
+              step="1"
               required
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-red-600"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-red-600 focus:outline-none"
             />
           </div>
 
@@ -234,9 +488,62 @@ export const NewRequestForm = ({ onSuccess }) => {
               name="date"
               value={formData.date}
               onChange={handleChange}
+              min={getTodayISO()}
               required
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-red-600"
             />
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div className="flex items-center justify-between gap-4">
+            <p
+              className={`text-sm font-semibold ${formData
+                .transportationAvailable
+                ? "text-red-700"
+                : "text-slate-600"
+                }`}
+            >
+              {formData
+                .transportationAvailable
+                ? t(
+                  "transportationAvailable"
+                )
+                : t(
+                  "transportationNotAvailable"
+                )}
+            </p>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={formData.transportationAvailable}
+              aria-label={t("transportationAvailability")}
+              onClick={() =>
+                setFormData(
+                  (previous) => ({
+                    ...previous,
+
+                    transportationAvailable:
+                      !previous
+                        .transportationAvailable,
+                  })
+                )
+              }
+              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 ${formData
+                .transportationAvailable
+                ? "bg-red-600"
+                : "bg-slate-300"
+                }`}
+            >
+              <span
+                aria-hidden="true"
+                className={`mt-0.5 inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${formData
+                  .transportationAvailable
+                  ? "translate-x-5"
+                  : "translate-x-0.5"
+                  }`}
+              />
+            </button>
           </div>
         </div>
 
@@ -250,6 +557,7 @@ export const NewRequestForm = ({ onSuccess }) => {
             value={formData.relationToPatient}
             onChange={handleChange}
             placeholder={t("placeholderRelationToPatient")}
+            required
             className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-red-600"
           />
         </div>
@@ -270,12 +578,15 @@ export const NewRequestForm = ({ onSuccess }) => {
 
         <button
           type="submit"
-          disabled={loading || !user?.verifiedByAdmin}
-          className="w-full bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg font-semibold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition"
-          title={!user?.verifiedByAdmin ? t("accountNotVerified") : ""}
+          disabled={loading || !isFormComplete}
+          title={!user?.verifiedByAdmin ? t("accountNotVerified") : !isFormComplete ? t("completeRequiredFields") : t("submit")}
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <Send className="w-4 h-4" />
-          {loading ? t("submitting") : t("submit")}
+          <Send className="h-4 w-4" />
+
+          {loading
+            ? t("submitting")
+            : t("submit")}
         </button>
       </form>
     </div>

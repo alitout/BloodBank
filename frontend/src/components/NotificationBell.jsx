@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState, } from "react";
-import { Bell, CheckCircle, Clock, Droplet, XCircle, } from "lucide-react";
+import React, { useEffect, useRef, useState, } from "react";
+import { Bell, Building2, CheckCircle, ClipboardCheck, Clock, Droplet, XCircle, } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useLanguage } from "./LanguageContext.jsx";
 import { useAuth } from "./AuthContext.jsx";
@@ -10,17 +10,16 @@ export const NotificationBell = ({ isMobilePanel = false, notificationData }) =>
   const { accessToken } = useAuth();
   const [showDropdown, setShowDropdown] = useState(isMobilePanel);
   const [processingId, setProcessingId] = useState(null);
-  const [error, setError] = useState("");
   const dropdownRef = useRef(null);
 
   const {
     pendingAccounts = [],
     pendingDonations = [],
     pendingProfileRequests = [],
+    pendingRequestApprovals = [],
+    pendingCustomHospitals = [],
     pendingCount = 0,
-    loading = false,
-    error:
-    dataError = "",
+    error: dataError = "",
     refetch,
     removePendingAccount,
     removePendingDonation,
@@ -372,6 +371,80 @@ export const NotificationBell = ({ isMobilePanel = false, notificationData }) =>
           )}
 
           <div className="divide-y divide-slate-200">
+            {/* Custom hospitals requiring admin completion */}
+            {pendingCustomHospitals.length > 0 && (
+              <button
+                type="button"
+                onClick={() =>
+                  openPendingSection(
+                    "custom-hospitals"
+                  )
+                }
+                className="w-full p-4 text-left hover:bg-slate-50"
+              >
+                <div className="flex items-start gap-3">
+                  <Building2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-600" />
+
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-slate-900">
+                      {language === "ar"
+                        ? "مستشفيات بانتظار الاستكمال"
+                        : "Hospitals awaiting completion"}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      {language === "ar"
+                        ? `${pendingCustomHospitals.length} مستشفى معلق`
+                        : `${pendingCustomHospitals.length} pending hospital(s)`}
+                    </p>
+
+                    <p className="mt-2 text-xs font-semibold text-blue-700">
+                      {language === "ar"
+                        ? "اضغط للمراجعة"
+                        : "Click to review"}
+                    </p>
+                  </div>
+                </div>
+              </button>
+            )}
+
+            {/* Blood requests awaiting admin approval */}
+            {pendingRequestApprovals.length > 0 && (
+              <button
+                type="button"
+                onClick={() =>
+                  openPendingSection(
+                    "request-approvals"
+                  )
+                }
+                className="w-full p-4 text-left hover:bg-slate-50"
+              >
+                <div className="flex items-start gap-3">
+                  <ClipboardCheck className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600" />
+
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-slate-900">
+                      {language === "ar"
+                        ? "طلبات دم بانتظار الموافقة"
+                        : "Blood requests awaiting approval"}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      {language === "ar"
+                        ? `${pendingRequestApprovals.length} طلب معلق`
+                        : `${pendingRequestApprovals.length} pending request(s)`}
+                    </p>
+
+                    <p className="mt-2 text-xs font-semibold text-red-700">
+                      {language === "ar"
+                        ? "اضغط للمراجعة"
+                        : "Click to review"}
+                    </p>
+                  </div>
+                </div>
+              </button>
+            )}
+            
             {/* Pending profile update/deletion requests */}
             {pendingProfileRequests.length > 0 && (
               <button

@@ -1,5 +1,27 @@
 import mongoose from "mongoose";
 
+const customHospitalSchema =
+  new mongoose.Schema(
+    {
+      name: {
+        type: String,
+        trim: true,
+        maxlength: 150,
+        default: null,
+      },
+
+      address: {
+        type: String,
+        trim: true,
+        maxlength: 300,
+        default: null,
+      },
+    },
+    {
+      _id: false,
+    }
+  );
+
 const pendingEditSchema = new mongoose.Schema(
   {
     changes: { type: mongoose.Schema.Types.Mixed, default: null },
@@ -66,6 +88,33 @@ const requestSchema = new mongoose.Schema(
     },
 
     hospital: { type: String, required: true, trim: true },
+
+    hospitalSelectionType: {
+      type: String,
+      enum: [
+        "registered",
+        "other",
+      ],
+      default: "registered",
+      index: true,
+    },
+
+    hospitalId: {
+      type:
+        mongoose.Schema.Types.ObjectId,
+      ref: "Hospital",
+      default: null,
+    },
+
+    customHospital: {
+      type: customHospitalSchema,
+      default: null,
+    },
+
+    transportationAvailable: {
+      type: Boolean,
+      default: false,
+    },
 
     unitsNeeded: {
       type: Number,

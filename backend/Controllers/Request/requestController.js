@@ -1,161 +1,332 @@
 import Requester from '../../models/Requests.js';
 import User from '../../models/User.js';
 import Donation from '../../models/Donation.js';
+import Hospital from "../../models/Hospital.js";
 import { Notification } from '../../models/Notification.js';
 import { assessDonorForRequest, findPlatformEligibleDonorsForRequest, getApprovedDonationHistory, } from "../../services/donorEligibilityService.js";
+import { randomUUID, } from "node:crypto";
+import { resolveRequestHospital, } from "../../services/requestHospitalService.js";
 
-// Get all blood requests
-const getAllRequesters = async (req, res) => {
-  try {
-    const requesters =
-      await Requester.find({}).sort({
-        createdAt: -1,
-      });
-
-    if (req.user?.role !== "donor") {
-      return res.json(requesters);
-    }
-
-    const donor = await User.findOne({
-      uid: req.user.uid,
-      role: "donor",
-    });
-
-    if (!donor) {
-      return res.status(404).json({
-        error: "Donor not found",
-      });
-    }
-
-    const donations =
-      await getApprovedDonationHistory(
-        donor.uid
+const attachRequesterContacts =
+  async (requests) => {
+    const requestObjects =
+      requests.map((request) =>
+        typeof request.toObject ===
+          "function"
+          ? request.toObject()
+          : request
       );
 
-    const enrichedRequests =
-      requesters.map((request) => ({
-        ...request.toObject(),
+    const creatorUids = [
+      ...new Set(
+        requestObjects
+          .map(
+            (request) =>
+              request.createdByUid
+          )
+          .filter(Boolean)
+      ),
+    ];
 
-        connectionAssessment:
-          assessDonorForRequest({
-            donor,
-            request,
-            donations,
-          }),
-      }));
-
-    return res.json(enrichedRequests);
-  } catch (error) {
-    console.error(
-      "[REQUESTER] Error fetching requests:",
-      error.message
-    );
-
-    return res.status(500).json({
-      error: "Failed to fetch requests",
-    });
-  }
-};
-
-// Create blood request
-const createRequester = async (req, res) => {
-  try {
-    const userUid =
-      req.user?.uid;
-
-    if (!userUid) {
-      return res.status(401).json({
-        error: "Authentication required",
-      });
+    if (
+      creatorUids.length === 0
+    ) {
+      return requestObjects;
     }
 
-    const {
-      fname,
-      fatherName,
-      lname,
-      bloodGenre,
-      bloodType,
-      hospital,
-      unitsNeeded,
-      date,
-      description,
-      relationToPatient,
-    } = req.body;
+    const creators =
+      await User.find({
+        uid: {
+          $in:
+            creatorUids,
+        },
+      })
+        .select(
+          "uid email phone"
+        )
+        .lean();
 
-    const newRequest =
-      await Requester.create({
-        id: `req-${Date.now()}`,
+    const creatorMap =
+      new Map(
+        creators.map(
+          (creator) => [
+            creator.uid,
+            creator,
+          ]
+        )
+      );
 
-        createdByUid:
-          userUid,
+    return requestObjects.map(
+      (request) => {
+        const creator =
+          creatorMap.get(
+            request.createdByUid
+          );
 
+        return {
+          ...request,
+
+          requesterContact: {
+            email:
+              creator?.email ||
+              null,
+
+            phone:
+              creator?.phone ||
+              null,
+          },
+        };
+      }
+    );
+  };
+
+// Get all blood requests
+const getAllRequesters =
+  async (req, res) => {
+    try {
+      const requestQuery =
+        req.user?.role ===
+          "donor"
+          ? {
+            status:
+              "pending",
+
+            approvalStatus:
+              "approved",
+          }
+          : {};
+
+      const requesters =
+        await Requester.find(
+          requestQuery
+        ).sort({
+          createdAt: -1,
+        });
+
+      /*
+       * This must be created before either
+       * the admin or donor branch uses it.
+       */
+      const requestsWithContact =
+        await attachRequesterContacts(
+          requesters
+        );
+
+      if (
+        req.user?.role !==
+        "donor"
+      ) {
+        return res.json(
+          requestsWithContact
+        );
+      }
+
+      const donor =
+        await User.findOne({
+          uid:
+            req.user.uid,
+
+          role: "donor",
+        });
+
+      if (!donor) {
+        return res.status(404).json({
+          error:
+            "Donor not found",
+        });
+      }
+
+      const donations =
+        await getApprovedDonationHistory(
+          donor.uid
+        );
+
+      const enrichedRequests =
+        requestsWithContact.map(
+          (request) => ({
+            ...request,
+
+            connectionAssessment:
+              assessDonorForRequest({
+                donor,
+                request,
+                donations,
+              }),
+          })
+        );
+
+      return res.json(
+        enrichedRequests
+      );
+    } catch (error) {
+      console.error(
+        "[REQUESTER] Error fetching requests:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Failed to fetch requests",
+      });
+    }
+  };
+
+// Create blood request
+const createRequester =
+  async (req, res) => {
+    try {
+      const userUid =
+        req.user?.uid;
+
+      if (!userUid) {
+        return res.status(401).json({
+          error:
+            "Authentication required",
+        });
+      }
+
+      const {
         fname,
         fatherName,
         lname,
         bloodGenre,
         bloodType,
-        hospital,
         unitsNeeded,
         date,
         description,
         relationToPatient,
+        transportationAvailable,
+      } = req.body;
 
-        status:
-          "pending",
+      if (
+        transportationAvailable !==
+        undefined &&
+        typeof transportationAvailable !==
+        "boolean"
+      ) {
+        return res.status(400).json({
+          error:
+            "Transportation availability must be a Boolean value.",
+          code:
+            "INVALID_TRANSPORTATION_AVAILABILITY",
+        });
+      }
 
-        approvalStatus:
-          "pending",
-      });
+      const hospitalData =
+        await resolveRequestHospital(
+          req.body
+        );
 
-    // Notify admins — NOT donors.
-    const admins =
-      await User.find({
-        role: "super_admin",
-      }).select("uid");
+      const newRequest =
+        await Requester.create({
+          id: `req-${randomUUID()}`,
+          createdByUid: userUid,
+          fname,
+          fatherName,
+          lname,
+          bloodGenre,
+          bloodType,
+          ...hospitalData,
+          transportationAvailable: transportationAvailable ?? false,
+          unitsNeeded,
+          date,
+          description,
+          relationToPatient,
+          status: "pending",
+          approvalStatus: "pending",
+        });
 
-    if (admins.length) {
-      await Notification.insertMany(
-        admins.map((admin) => ({
-          recipientUid:
-            admin.uid,
+      try {
+        const admins =
+          await User.find({
+            role:
+              "super_admin",
+          })
+            .select("uid")
+            .lean();
 
-          type:
-            "request_submitted",
+        if (
+          admins.length > 0
+        ) {
+          await Notification.insertMany(
+            admins.map(
+              (admin) => ({
+                adminId:
+                  admin.uid,
 
-          requestId:
-            newRequest._id,
+                donorId: null,
 
-          title:
-            "Blood Request Requires Approval",
+                type:
+                  "request_submitted",
 
+                requestId:
+                  newRequest._id,
+
+                title:
+                  "Blood Request Requires Approval",
+
+                message:
+                  `${req.user.email || userUid} submitted a new blood request.`,
+
+                read: false,
+
+                actionTaken:
+                  false,
+              })
+            )
+          );
+        }
+      } catch (
+      notificationError
+      ) {
+        console.error(
+          "[REQUEST] Request created, but admin notification failed:",
+          notificationError
+        );
+      }
+
+      return res
+        .status(201)
+        .json({
           message:
-            `${req.user.email || userUid} submitted a new blood request.`,
+            "Blood request submitted for admin approval",
 
-          read: false,
-        }))
+          requester:
+            newRequest,
+        });
+    } catch (error) {
+      console.error(
+        "[REQUEST] Create:",
+        error
       );
+
+      const isClientError =
+        error.statusCode === 400 ||
+        error.name ===
+        "ValidationError";
+
+      const statusCode =
+        isClientError
+          ? 400
+          : 500;
+
+      return res
+        .status(statusCode)
+        .json({
+          error:
+            isClientError
+              ? error.message
+              : "Failed to submit blood request",
+
+          ...(error.code
+            ? {
+              code:
+                error.code,
+            }
+            : {}),
+        });
     }
-
-    return res.status(201).json({
-      message:
-        "Blood request submitted for admin approval",
-
-      requester:
-        newRequest,
-    });
-
-  } catch (error) {
-    console.error(
-      "[REQUEST] Create:",
-      error
-    );
-
-    return res.status(500).json({
-      error:
-        "Failed to submit blood request",
-    });
-  }
-};
+  };
 
 const getMyRequests = async (
   req,
@@ -222,29 +393,150 @@ const getMyRequests = async (
 };
 
 // Update blood request
-const updateRequester = async (req, res) => {
-  try {
-    const { id } = req.params;
-    //console.log('[REQUESTER] Updating blood request:', id);
+const updateRequester =
+  async (req, res) => {
+    try {
+      const { id } =
+        req.params;
 
-    const updatedRequest = await Requester.findByIdAndUpdate(
-      id,
-      { ...req.body, updatedAt: new Date() },
-      { new: true }
-    );
+      /*
+       * This endpoint must only be accessible
+       * through verifyAdminToken.
+       */
+      const allowedFields = [
+        "fname",
+        "fatherName",
+        "lname",
+        "bloodGenre",
+        "bloodType",
+        "transportationAvailable",
+        "unitsNeeded",
+        "date",
+        "description",
+        "relationToPatient",
+        "status",
+      ];
 
-    if (!updatedRequest) {
-      //console.log('[REQUESTER] Update failed: Request not found');
-      return res.status(404).json({ error: 'Blood request not found' });
+      const updateData =
+        Object.fromEntries(
+          Object.entries(
+            req.body
+          ).filter(([field]) =>
+            allowedFields.includes(
+              field
+            )
+          )
+        );
+
+      if (
+        Object.keys(
+          updateData
+        ).length === 0
+      ) {
+        return res.status(400).json({
+          error:
+            "No valid request fields were provided.",
+        });
+      }
+
+      if (
+        updateData
+          .transportationAvailable !==
+        undefined &&
+        typeof updateData
+          .transportationAvailable !==
+        "boolean"
+      ) {
+        return res.status(400).json({
+          error:
+            "Transportation availability must be a Boolean value.",
+        });
+      }
+
+      if (
+        updateData.unitsNeeded !==
+        undefined
+      ) {
+        const unitsNeeded =
+          Number(
+            updateData.unitsNeeded
+          );
+
+        if (
+          !Number.isInteger(
+            unitsNeeded
+          ) ||
+          unitsNeeded < 1 ||
+          unitsNeeded > 50
+        ) {
+          return res.status(400).json({
+            error:
+              "Units needed must be an integer between 1 and 50.",
+          });
+        }
+
+        updateData.unitsNeeded =
+          unitsNeeded;
+      }
+
+      const updatedRequest =
+        await Requester.findByIdAndUpdate(
+          id,
+          {
+            $set: {
+              ...updateData,
+
+              updatedAt:
+                new Date(),
+            },
+          },
+          {
+            new: true,
+            runValidators: true,
+          }
+        );
+
+      if (!updatedRequest) {
+        return res.status(404).json({
+          error:
+            "Blood request not found",
+        });
+      }
+
+      const [
+        requestWithContact,
+      ] =
+        await attachRequesterContacts([
+          updatedRequest,
+        ]);
+
+      return res.json({
+        message:
+          "Blood request updated",
+
+        requester:
+          requestWithContact,
+      });
+    } catch (error) {
+      console.error(
+        "[REQUESTER] Update error:",
+        error
+      );
+
+      const status =
+        error.name ===
+          "ValidationError"
+          ? 400
+          : 500;
+
+      return res.status(status).json({
+        error:
+          status === 400
+            ? error.message
+            : "Failed to update blood request",
+      });
     }
-
-    //console.log('[REQUESTER] Blood request updated:', id);
-    res.json({ message: 'Blood request updated', requester: updatedRequest });
-  } catch (error) {
-    console.error('[REQUESTER] Error updating request:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-};
+  };
 
 // Delete blood request
 const deleteRequester = async (req, res) => {
@@ -319,6 +611,13 @@ const assignRequestToDonor = async (req, res) => {
       });
     }
 
+    if (request.approvalStatus !== "approved") {
+      return res.status(409).json({
+        error: "This blood request is awaiting administrator approval.",
+        code: "REQUEST_NOT_APPROVED",
+      });
+    }
+
     const donations =
       await getApprovedDonationHistory(
         donor.uid
@@ -331,23 +630,15 @@ const assignRequestToDonor = async (req, res) => {
         donations,
       });
 
-    if (
-      !connectionAssessment.platformEligible
-    ) {
+    if (!connectionAssessment.platformEligible) {
       return res.status(409).json({
-        error:
-          "Donor cannot connect to this request through the platform",
+        error: "Donor cannot connect to this request through the platform",
 
-        code:
-          connectionAssessment.reasons[0] ||
-          "DONOR_NOT_PLATFORM_ELIGIBLE",
+        code: connectionAssessment.reasons[0] || "DONOR_NOT_PLATFORM_ELIGIBLE",
 
-        reasons:
-          connectionAssessment.reasons,
+        reasons: connectionAssessment.reasons,
 
-        nextEligibleDate:
-          connectionAssessment
-            .nextEligibleDate,
+        nextEligibleDate: connectionAssessment.nextEligibleDate,
       });
     }
 
@@ -466,6 +757,13 @@ const assignSelfToRequest = async (req, res) => {
       return res.status(400).json({
         error:
           'This blood request is no longer active'
+      });
+    }
+
+    if (request.approvalStatus !== "approved") {
+      return res.status(409).json({
+        error: "This blood request is awaiting administrator approval.",
+        code: "REQUEST_NOT_APPROVED",
       });
     }
 
@@ -626,21 +924,67 @@ const assignSelfToRequest = async (req, res) => {
 
     // Create notification for admins about new assignment
     try {
-      const donorInfo = await User.findOne({ uid: donorId });
-      await Notification.create({
-        adminId: null, // For all admins
-        type: 'donor_assigned',
-        title: `New Assignment: ${donorInfo?.fname} ${donorInfo?.lname}`,
-        message: `Donor ${donorInfo?.fname} ${donorInfo?.lname} has assigned ${unitsToAssign} unit(s) to request for ${request.fname}`,
-        requestId: request._id,
-        donorId: donorId,
-        read: false,
-        createdAt: new Date()
-      });
-      console.log('[NOTIFICATION] Created admin notification for new assignment');
-    } catch (notificationError) {
-      console.error('[REQUESTER] Error creating admin notification:', notificationError.message);
-      // Don't fail the assignment if notification fails
+      const [
+        donorInfo,
+        admins,
+      ] =
+        await Promise.all([
+          User.findOne({
+            uid:
+              donorId,
+          })
+            .select(
+              "fname lname"
+            )
+            .lean(),
+
+          User.find({
+            role:
+              "super_admin",
+          })
+            .select("uid")
+            .lean(),
+        ]);
+
+      if (
+        admins.length > 0
+      ) {
+        await Notification.insertMany(
+          admins.map(
+            (admin) => ({
+              adminId:
+                admin.uid,
+
+              donorId:
+                donorId,
+
+              type:
+                "donor_assigned",
+
+              title:
+                `New Assignment: ${donorInfo?.fname || ""} ${donorInfo?.lname || ""}`.trim(),
+
+              message:
+                `Donor ${donorInfo?.fname || ""} ${donorInfo?.lname || ""} connected to the request for ${request.fname} ${request.lname}.`.trim(),
+
+              requestId:
+                request._id,
+
+              read: false,
+
+              actionTaken:
+                false,
+            })
+          )
+        );
+      }
+    } catch (
+    notificationError
+    ) {
+      console.error(
+        "[REQUESTER] Assignment saved, but admin notification failed:",
+        notificationError
+      );
     }
 
     console.log('[REQUESTER] Donor self-assigned successfully:', id);
@@ -725,64 +1069,69 @@ const getAvailableRequests = async (req, res) => {
       });
     }
 
-    const [requests, donations] =
-      await Promise.all([
-        Requester.find({
-          status: "pending",
-        }).sort({
-          createdAt: -1,
-        }),
+    const [
+      requests,
+      donations,
+    ] = await Promise.all([
+      Requester.find({
+        status:
+          "pending",
 
-        getApprovedDonationHistory(
-          donorId
-        ),
-      ]);
+        approvalStatus:
+          "approved",
+      }).sort({
+        createdAt: -1,
+      }),
 
-    const availableRequests = requests
-      .map((request) => {
-        const totalAssigned =
-          request.assignedDonors?.reduce(
-            (total, assignment) =>
-              total +
-              Number(
-                assignment.unitsAssigned ||
-                0
-              ),
-            0
-          ) || 0;
+      getApprovedDonationHistory(
+        donorId
+      ),
+    ]);
 
-        const unitsAvailable =
-          request.unitsNeeded -
-          totalAssigned;
+    const availableRequests = requests.map((request) => {
+      const totalAssigned =
+        request.assignedDonors?.reduce(
+          (total, assignment) =>
+            total +
+            Number(
+              assignment.unitsAssigned ||
+              0
+            ),
+          0
+        ) || 0;
 
-        const alreadyAssigned =
-          request.assignedDonors?.some(
-            (assignment) =>
-              assignment.donorUid ===
-              donorId
-          );
+      const unitsAvailable =
+        request.unitsNeeded -
+        totalAssigned;
 
-        const connectionAssessment =
-          assessDonorForRequest({
-            donor,
-            request,
-            donations,
-          });
+      const alreadyAssigned =
+        request.assignedDonors?.some(
+          (assignment) =>
+            assignment.donorUid ===
+            donorId
+        );
 
-        return {
-          ...request.toObject(),
+      const connectionAssessment =
+        assessDonorForRequest({
+          donor,
+          request,
+          donations,
+        });
 
-          unitsAssigned:
-            totalAssigned,
+      return {
+        ...request.toObject(),
 
-          unitsAvailable,
+        unitsAssigned:
+          totalAssigned,
 
-          alreadyAssigned:
-            Boolean(alreadyAssigned),
+        unitsAvailable,
 
-          connectionAssessment,
-        };
-      })
+        alreadyAssigned:
+          Boolean(alreadyAssigned),
+
+        connectionAssessment,
+      };
+    })
       .filter(
         (request) =>
           request.unitsAvailable > 0 &&
@@ -791,8 +1140,13 @@ const getAvailableRequests = async (req, res) => {
             .compatible
       );
 
+    const availableRequestsWithContact =
+      await attachRequesterContacts(
+        availableRequests
+      );
+
     return res.json({
-      availableRequests,
+      availableRequests: availableRequestsWithContact,
 
       donorBloodType:
         donor.bloodType,
@@ -1088,7 +1442,12 @@ const getAssignedRequests = async (req, res) => {
       })
       .filter(Boolean);
 
-    res.json(enrichedRequests);
+    const requestsWithContact =
+      await attachRequesterContacts(
+        enrichedRequests
+      );
+
+    return res.json(requestsWithContact);
   } catch (error) {
     console.error(
       '[REQUESTER] Error fetching assigned requests:',
@@ -1357,67 +1716,508 @@ const cancelAssignment =
   };
 
 // Get a single blood request by ID
-const getRequesterById = async (req, res) => {
-  try {
-    const { id } = req.params;
+const getRequesterById =
+  async (req, res) => {
+    try {
+      const { id } =
+        req.params;
 
-    const request =
-      await Requester.findById(id);
+      const request =
+        await Requester.findById(
+          id
+        );
 
-    if (!request) {
-      return res.status(404).json({
-        error:
-          "Blood request not found",
-      });
-    }
-
-    const response = request.toObject();
-
-    if (req.user?.role === "donor") {
-      const donor =
-        await User.findOne({
-          uid: req.user.uid,
-          role: "donor",
-        });
-
-      if (!donor) {
+      if (!request) {
         return res.status(404).json({
-          error: "Donor not found",
+          error:
+            "Blood request not found",
         });
       }
 
-      const donations =
-        await getApprovedDonationHistory(
-          donor.uid
+      const isRequestOwner =
+        request.createdByUid ===
+        req.user?.uid;
+
+      /*
+       * This check must happen before
+       * returning the response.
+       */
+      if (
+        req.user?.role ===
+        "donor" &&
+        request.approvalStatus !==
+        "approved" &&
+        !isRequestOwner
+      ) {
+        return res.status(404).json({
+          error:
+            "Blood request not found",
+        });
+      }
+
+      const [
+        responseWithContact,
+      ] =
+        await attachRequesterContacts([
+          request,
+        ]);
+
+      const response = {
+        ...responseWithContact,
+      };
+
+      if (
+        req.user?.role ===
+        "donor"
+      ) {
+        const donor =
+          await User.findOne({
+            uid:
+              req.user.uid,
+
+            role:
+              "donor",
+          });
+
+        if (!donor) {
+          return res
+            .status(404)
+            .json({
+              error:
+                "Donor not found",
+            });
+        }
+
+        const donations =
+          await getApprovedDonationHistory(
+            donor.uid
+          );
+
+        response
+          .connectionAssessment =
+          assessDonorForRequest({
+            donor,
+            request,
+            donations,
+          });
+      }
+
+      return res.json(
+        response
+      );
+    } catch (error) {
+      console.error(
+        "[REQUESTER] Request details error:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Failed to fetch blood request",
+      });
+    }
+  };
+
+const getPendingRequestApprovals =
+  async (req, res) => {
+    try {
+      const requests =
+        await Requester.find({
+          approvalStatus:
+            "pending",
+        }).sort({
+          createdAt: -1,
+        });
+
+      const enrichedRequests =
+        await attachRequesterContacts(
+          requests
         );
 
-      response.connectionAssessment =
-        assessDonorForRequest({
-          donor,
-          request,
-          donations,
-        });
+      return res.json({
+        requests:
+          enrichedRequests,
+
+        total:
+          enrichedRequests.length,
+      });
+    } catch (error) {
+      console.error(
+        "[REQUEST APPROVAL] Fetch:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Failed to load pending blood requests",
+      });
     }
+  };
 
-    return res.json(response);
-  } catch (error) {
-    console.error(
-      "[REQUESTER] Request details error:",
-      error.message
-    );
+const approveRequest =
+  async (req, res) => {
+    try {
+      const request =
+        await Requester.findOne({
+          _id:
+            req.params.id,
 
-    return res.status(500).json({
-      error:
-        "Failed to fetch blood request",
-    });
-  }
-};
+          approvalStatus:
+            "pending",
+        });
+
+      if (!request) {
+        return res.status(404).json({
+          error:
+            "Pending blood request not found",
+        });
+      }
+
+      if (request.hospitalSelectionType === "other") {
+        return res.status(409).json({
+          error: "The custom hospital must be reviewed and added or linked before approving this request.",
+          code: "CUSTOM_HOSPITAL_REVIEW_REQUIRED",
+        });
+      }
+      request.approvalStatus = "approved";
+      request.approvedBy = req.user.uid;
+      request.approvedAt = new Date();
+      request.rejectedBy = null;
+      request.rejectedAt = null;
+      request.rejectionReason = null;
+      await request.save();
+
+      const notificationResults =
+        await Promise.allSettled([
+          Notification.updateMany(
+            {
+              requestId: request._id,
+              type: "request_submitted",
+            },
+            {
+              $set: {
+                read: true,
+                readAt: new Date(),
+                actionTaken: true,
+                action: "approved",
+              },
+            }
+          ),
+
+          Notification.create({
+            donorId: request.createdByUid,
+            adminId: null,
+            requestId: request._id,
+            type: "request_approved",
+            title: "Blood Request Approved",
+            message: "Your blood request was approved and is now visible to eligible donors.",
+            read: false,
+            actionTaken: false,
+          }),
+        ]);
+
+      for (
+        const notificationResult
+        of notificationResults
+      ) {
+        if (
+          notificationResult.status ===
+          "rejected"
+        ) {
+          console.error(
+            "[REQUEST APPROVAL] Notification failed:",
+            notificationResult.reason
+          );
+        }
+      }
+
+      let matchingResult = {
+        eligibleDonors: 0,
+        notificationsCreated: 0,
+      };
+
+      try {
+        matchingResult =
+          await findAndNotifyMatchingDonors(
+            request
+          );
+      } catch (
+      matchingError
+      ) {
+        console.error(
+          "[REQUEST APPROVAL] Matching notification failed:",
+          matchingError
+        );
+      }
+
+      return res.json({
+        message:
+          "Blood request approved",
+
+        requester:
+          request,
+
+        matchingResult,
+      });
+
+    } catch (error) {
+      console.error(
+        "[REQUEST APPROVAL] Approve:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Failed to approve blood request",
+      });
+    }
+  };
+
+const rejectRequest =
+  async (req, res) => {
+    try {
+      const rejectionReason =
+        typeof req.body
+          ?.rejectionReason ===
+          "string"
+          ? req.body
+            .rejectionReason
+            .trim()
+          : "";
+
+      if (!rejectionReason) {
+        return res.status(400).json({
+          error:
+            "A rejection reason is required.",
+        });
+      }
+
+      const request =
+        await Requester.findOne({
+          _id:
+            req.params.id,
+
+          approvalStatus:
+            "pending",
+        });
+
+      if (!request) {
+        return res.status(404).json({
+          error:
+            "Pending blood request not found",
+        });
+      }
+
+      request.approvalStatus =
+        "rejected";
+
+      request.rejectedBy =
+        req.user.uid;
+
+      request.rejectedAt =
+        new Date();
+
+      request.rejectionReason =
+        rejectionReason;
+
+      request.approvedBy =
+        null;
+
+      request.approvedAt =
+        null;
+
+      await request.save();
+
+      const notificationResults =
+        await Promise.allSettled([
+          Notification.updateMany(
+            {
+              requestId: request._id,
+              type: "request_submitted",
+            },
+            {
+              $set: {
+                read: true,
+                readAt: new Date(),
+                actionTaken: true,
+                action: "rejected",
+              },
+            }
+          ),
+
+          Notification.create({
+            donorId: request.createdByUid,
+            adminId: null,
+            requestId: request._id,
+            type: "request_rejected",
+            title: "Blood Request Rejected",
+            message: `Your blood request was rejected: ${rejectionReason}`,
+            read: false,
+            actionTaken: false,
+          }),
+        ]);
+
+      for (
+        const notificationResult
+        of notificationResults
+      ) {
+        if (
+          notificationResult.status ===
+          "rejected"
+        ) {
+          console.error(
+            "[REQUEST REJECTION] Notification failed:",
+            notificationResult.reason
+          );
+        }
+      }
+
+      return res.json({
+        message:
+          "Blood request rejected",
+
+        requester:
+          request,
+      });
+    } catch (error) {
+      console.error(
+        "[REQUEST APPROVAL] Reject:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Failed to reject blood request",
+      });
+    }
+  };
+
+const registerCustomHospital =
+  async (req, res) => {
+    try {
+      const request =
+        await Requester.findById(
+          req.params.id
+        );
+
+      if (!request) {
+        return res.status(404).json({
+          error:
+            "Blood request not found",
+        });
+      }
+
+      if (request.hospitalSelectionType !== "other") {
+        return res.status(409).json({
+          error:
+            "This request does not use a custom hospital.",
+        });
+      }
+
+      const name =
+        String(
+          req.body.name || ""
+        ).trim();
+
+      const location =
+        String(
+          req.body.location || ""
+        ).trim();
+
+      const phoneNumber =
+        String(
+          req.body.phoneNumber ||
+          ""
+        ).trim();
+
+      const address =
+        String(
+          req.body.address || ""
+        ).trim();
+
+      if (name.length > 150 || location.length > 150 || phoneNumber.length > 30 || address.length > 300) {
+        return res.status(400).json({
+          error: "One or more hospital fields exceed the allowed length.",
+        });
+      }
+
+      if (!name || !location || !phoneNumber || !address) {
+        return res.status(400).json({
+          error: "Hospital name, location, phone number and address are required.",
+        });
+      }
+
+      const existingHospital =
+        await Hospital.findOne({
+          name,
+        }).collation({
+          locale: "en",
+          strength: 2,
+        });
+
+      if (existingHospital) {
+        return res.status(409).json({
+          error:
+            "A hospital with this name already exists.",
+        });
+      }
+
+      const hospital =
+        await Hospital.create({
+          id: `hosp-${randomUUID()}`,
+          name,
+          location,
+          phoneNumber,
+          address,
+          verified: true,
+          verifiedBy: req.user.uid,
+        });
+
+      request.hospital = hospital.name;
+      request.hospitalSelectionType = "registered";
+      request.hospitalId = hospital._id;
+      request.customHospital = null;
+      request.updatedAt = new Date();
+      await request.save();
+      const [requestWithContact,] = await attachRequesterContacts([request,]);
+
+      return res.status(201).json({
+        message:
+          "Hospital added and linked to the request.",
+
+        hospital,
+
+        requester:
+          requestWithContact,
+      });
+    } catch (error) {
+      console.error(
+        "[CUSTOM HOSPITAL] Registration:",
+        error
+      );
+
+      if (error?.code === 11000) {
+        return res.status(409).json({
+          error:
+            "A hospital with this identifier already exists.",
+        });
+      }
+
+      return res.status(500).json({
+        error:
+          "Failed to add custom hospital",
+      });
+    }
+  };
 
 export default {
   getAllRequesters,
   getRequesterById,
   createRequester,
   getMyRequests,
+  getPendingRequestApprovals,
+  approveRequest,
+  rejectRequest,
   updateRequester,
   deleteRequester,
   assignRequestToDonor,
@@ -1429,5 +2229,6 @@ export default {
   getAssignedRequests,
   getDonationHistory,
   getAllDonations,
-  cancelAssignment
+  cancelAssignment,
+  registerCustomHospital
 };

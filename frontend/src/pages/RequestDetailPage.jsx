@@ -3,60 +3,25 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../components/AuthContext.jsx";
 import { useLanguage } from "../components/LanguageContext.jsx";
 import { API_BASE_URL, getAccessToken } from "../utils/api.js";
-import { Heart, ArrowLeft, Loader, AlertCircle, MapPin, Droplet, Users, Check } from "lucide-react";
+import { Heart, ArrowLeft, Loader, AlertCircle, MapPin, Droplet, Users, Check, Phone } from "lucide-react";
 import { getConnectionBlockReason, getWaitingPeriodInformation } from "../utils/connectionAssessment.js";
 import { formatDateDDMMYYYY, } from "../utils/dateFormat.js";
 import { SignOutButton, } from "../components/SignOutButton.jsx";
+import { Truck01, } from "@untitledui/icons";
 
 export const RequestDetailPage =
   () => {
-    const { requestId } =
-      useParams();
-
-    const navigate =
-      useNavigate();
-
-    const { t, language } =
-      useLanguage();
-
-    const {
-      user,
-      accessToken,
-      refreshUserProfile,
-    } = useAuth();
-
-    const [
-      request,
-      setRequest,
-    ] = useState(null);
-
-    const [
-      loading,
-      setLoading,
-    ] = useState(true);
-
-    const [error, setError] =
-      useState(null);
-
-    const [
-      assigning,
-      setAssigning,
-    ] = useState(false);
-
-    const [
-      assigned,
-      setAssigned,
-    ] = useState(false);
-
-    const [
-      showUnitsModal,
-      setShowUnitsModal,
-    ] = useState(false);
-
-    const [
-      unitsToAssign,
-      setUnitsToAssign,
-    ] = useState(1);
+    const { requestId } = useParams();
+    const navigate = useNavigate();
+    const { t, language } = useLanguage();
+    const { user, accessToken, refreshUserProfile, } = useAuth();
+    const [request, setRequest,] = useState(null);
+    const [loading, setLoading,] = useState(true);
+    const [error, setError] = useState(null);
+    const [assigning, setAssigning,] = useState(false);
+    const [assigned, setAssigned,] = useState(false);
+    const [showUnitsModal, setShowUnitsModal,] = useState(false);
+    const [unitsToAssign, setUnitsToAssign,] = useState(1);
 
     /*
      * Refresh current user when page opens.
@@ -601,6 +566,89 @@ export const RequestDetailPage =
                       }
                     </p>
                   )}
+                </div>
+
+
+              </div>
+            </div>
+
+            <div className="rounded-lg bg-white p-4 shadow md:col-span-2">
+              <h3 className="mb-3 text-center font-bold text-gray-900">
+                {t(
+                  "requesterContactInformation"
+                )}
+              </h3>
+
+              <div className="flex flex-col items-center gap-3">
+                <a
+                  href={
+                    request
+                      .requesterContact
+                      ?.phone
+                      ? `tel:${request.requesterContact.phone}`
+                      : undefined
+                  }
+                  className="flex items-center gap-2 text-gray-700 hover:text-red-600"
+                >
+                  <Phone className="h-5 w-5" />
+
+                  {request
+                    .requesterContact
+                    ?.phone ||
+                    t("notProvided")}
+                </a>
+              </div>
+            </div>
+
+            <div className="rounded-lg bg-white p-4 shadow md:col-span-2">
+              <div className="flex flex-col items-center gap-3 text-center">
+                <Truck01
+                  className={`h-6 w-6 ${request
+                    .transportationAvailable ===
+                    true
+                    ? "text-red-600"
+                    : "text-slate-500"
+                    }`}
+                  aria-hidden="true"
+                />
+
+                <div>
+                  <p className="text-sm text-gray-600">
+                    {t(
+                      "transportationAvailability"
+                    )}
+                  </p>
+
+                  <p
+                    className={`font-bold ${request
+                      .transportationAvailable ===
+                      true
+                      ? "text-red-700"
+                      : "text-slate-700"
+                      }`}
+                  >
+                    {request
+                      .transportationAvailable ===
+                      true
+                      ? t(
+                        "transportationAvailable"
+                      )
+                      : t(
+                        "transportationNotAvailable"
+                      )}
+                  </p>
+
+                  <p className="mt-1 text-xs text-gray-500">
+                    {request
+                      .transportationAvailable ===
+                      true
+                      ? t(
+                        "transportationAvailableDetail"
+                      )
+                      : t(
+                        "transportationNotAvailableDetail"
+                      )}
+                  </p>
                 </div>
               </div>
             </div>

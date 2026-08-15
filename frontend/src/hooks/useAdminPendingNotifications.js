@@ -8,30 +8,13 @@ export const useAdminPendingNotifications = (
         refreshInterval = 10000,
     } = {}
 ) => {
-    const [
-        pendingAccounts,
-        setPendingAccounts,
-    ] = useState([]);
-
-    const [
-        pendingDonations,
-        setPendingDonations,
-    ] = useState([]);
-
-    const [
-        pendingProfileRequests,
-        setPendingProfileRequests,
-    ] = useState([]);
-
-    const [
-        loading,
-        setLoading,
-    ] = useState(true);
-
-    const [
-        error,
-        setError,
-    ] = useState("");
+    const [pendingAccounts, setPendingAccounts,] = useState([]);
+    const [pendingDonations, setPendingDonations,] = useState([]);
+    const [pendingProfileRequests, setPendingProfileRequests,] = useState([]);
+    const [pendingRequestApprovals, setPendingRequestApprovals,] = useState([]);
+    const [pendingCustomHospitals, setPendingCustomHospitals,] = useState([]);
+    const [loading, setLoading,] = useState(true);
+    const [error, setError,] = useState("");
 
     const fetchPendingData =
         useCallback(
@@ -46,11 +29,12 @@ export const useAdminPendingNotifications = (
                     setPendingAccounts([]);
                     setPendingDonations([]);
                     setPendingProfileRequests([]);
+                    setPendingRequestApprovals([]);
+                    setPendingCustomHospitals([]);
                     setLoading(false);
 
                     return;
                 }
-
                 try {
                     if (showLoader) {
                         setLoading(true);
@@ -62,6 +46,7 @@ export const useAdminPendingNotifications = (
                         accountsResponse,
                         donationsResponse,
                         profileResponse,
+                        requestsResponse,
                     ] = await Promise.all([
                         fetch(
                             `${API_BASE_URL}/auth/admin/accounts`,
@@ -98,16 +83,31 @@ export const useAdminPendingNotifications = (
                                 },
                             }
                         ),
+
+                        fetch(
+                            `${API_BASE_URL}/requesters/admin/pending-approval`,
+                            {
+                                method: "GET",
+                                headers: {
+                                    Authorization:
+                                        `Bearer ${token}`,
+                                    Accept:
+                                        "application/json",
+                                },
+                            }
+                        )
                     ]);
 
                     const [
                         accountsData,
                         donationsData,
                         profileData,
+                        requestsData,
                     ] = await Promise.all([
                         accountsResponse.json(),
                         donationsResponse.json(),
                         profileResponse.json(),
+                        requestsResponse.json(),
                     ]);
 
                     if (!accountsResponse.ok) {
@@ -133,6 +133,45 @@ export const useAdminPendingNotifications = (
                             "Failed to load profile requests"
                         );
                     }
+
+                    if (!requestsResponse.ok) {
+                        throw new Error(
+                            requestsData?.error ||
+                            requestsData?.message ||
+                            "Failed to load pending blood requests"
+                        );
+                    }
+
+                    const allPendingRequests =
+                        Array.isArray(requestsData)
+                            ? requestsData
+                            : Array.isArray(
+                                requestsData?.requests
+                            )
+                                ? requestsData.requests
+                                : [];
+
+                    const customHospitalRequests =
+                        allPendingRequests.filter(
+                            (request) =>
+                                request?.hospitalSelectionType ===
+                                "other"
+                        );
+
+                    const requestsReadyForApproval =
+                        allPendingRequests.filter(
+                            (request) =>
+                                request?.hospitalSelectionType !==
+                                "other"
+                        );
+
+                    setPendingCustomHospitals(
+                        customHospitalRequests
+                    );
+
+                    setPendingRequestApprovals(
+                        requestsReadyForApproval
+                    );
 
                     const accounts =
                         Array.isArray(
@@ -289,12 +328,16 @@ export const useAdminPendingNotifications = (
     const pendingCount =
         pendingAccounts.length +
         pendingDonations.length +
-        pendingProfileRequests.length;
+        pendingProfileRequests.length +
+        pendingRequestApprovals.length +
+        pendingCustomHospitals.length;
 
     return {
         pendingAccounts,
         pendingDonations,
         pendingProfileRequests,
+        pendingRequestApprovals,
+        pendingCustomHospitals,
         pendingCount,
         loading,
         error,

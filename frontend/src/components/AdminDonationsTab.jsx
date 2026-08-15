@@ -90,7 +90,6 @@ export default function AdminDonationsTab() {
 
   return (
     <div className="space-y-6">
-      {/* <AdminDonationApprovals /> */}
       {/* Header */}
       <div className="bg-gradient-to-r from-red-50 to-red-100 rounded-lg p-4 border border-red-200">
         <div className="flex items-center gap-3 mb-2">

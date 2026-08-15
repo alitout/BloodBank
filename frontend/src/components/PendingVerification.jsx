@@ -7,28 +7,69 @@ import { authAPI, API_BASE_URL, getAccessToken } from "../utils/api.js";
 import { useLocation } from "react-router-dom";
 import { AdminProfileRequestsTab } from "./AdminProfileRequestsTab.jsx";
 import AdminDonationApprovals from "./AdminDonationApprovals.jsx";
+import AdminRequestApprovals from "./AdminRequestApprovals.jsx";
 
 export const PendingVerification = () => {
   const { t, language } = useLanguage();
   const { user: authUser, accessToken } = useAuth();
   const [error, setError] = useState("");
-  const { getCachedData, invalidateCache } = useDataCache();
+  const { invalidateCache } = useDataCache();
   const [pendingUsers, setPendingUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState("");
   const location = useLocation();
 
-  const [pendingCounts, setPendingCounts] = useState({ profileRequests: 0, donations: 0 });
-  const [countsLoading, setCountsLoading,] = useState(true);
+  const [pendingCounts, setPendingCounts,] = useState({ requestApprovals: 0, customHospitals: 0, profileRequests: 0, donations: 0, });
+  const [countsLoading, setCountsLoading,] = useState({ requestApprovals: true, customHospitals: true, profileRequests: true, donations: true, });
 
   useEffect(() => {
     if (!accessToken) {
-      setCountsLoading(false);
+      setCountsLoading({
+        requestApprovals: false,
+        customHospitals: false,
+        profileRequests: false,
+        donations: false,
+      });
 
       return undefined;
     }
-  }, [accessToken,]);
+
+    return undefined;
+  }, [accessToken]);
+
+  const handleRequestCountsChange =
+    useCallback(
+      ({
+        requests,
+        hospitals,
+      }) => {
+        setPendingCounts(
+          (current) => ({
+            ...current,
+
+            requestApprovals:
+              requests,
+
+            customHospitals:
+              hospitals,
+          })
+        );
+
+        setCountsLoading(
+          (current) => ({
+            ...current,
+
+            requestApprovals:
+              false,
+
+            customHospitals:
+              false,
+          })
+        );
+      },
+      []
+    );
 
   const handleProfileCountChange =
     useCallback(
@@ -229,7 +270,45 @@ export const PendingVerification = () => {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <a
+          href="#pending-custom-hospitals"
+          className="rounded-lg border border-amber-200 bg-amber-50 p-4"
+        >
+          <p className="text-sm font-semibold text-amber-800">
+            {t(
+              "pendingCustomHospitals"
+            )}
+          </p>
+
+          <p className="mt-2 text-3xl font-bold text-amber-900">
+            {countsLoading
+              .customHospitals
+              ? "…"
+              : pendingCounts
+                .customHospitals}
+          </p>
+        </a>
+
+        <a
+          href="#request-approvals"
+          className="rounded-lg border border-red-200 bg-red-50 p-4"
+        >
+          <p className="text-sm font-semibold text-red-800">
+            {t(
+              "bloodRequestApprovals"
+            )}
+          </p>
+
+          <p className="mt-2 text-3xl font-bold text-red-900">
+            {countsLoading
+              .requestApprovals
+              ? "…"
+              : pendingCounts
+                .requestApprovals}
+          </p>
+        </a>
+
         <a
           href="#profile-requests"
           className="rounded-lg border border-purple-200 bg-purple-50 p-4"
@@ -272,6 +351,30 @@ export const PendingVerification = () => {
           </p>
         </a>
       </div>
+
+      <section
+        id="blood-request-approvals"
+        className="scroll-mt-24 rounded-lg border border-slate-200 bg-white p-4"
+      >
+        <h3 className="mb-4 text-lg font-bold text-slate-900">
+          {t(
+            "bloodRequestApprovals"
+          )}{" "}
+          (
+          {countsLoading
+            .requestApprovals
+            ? "…"
+            : pendingCounts
+              .requestApprovals}
+          )
+        </h3>
+
+        <AdminRequestApprovals
+          onCountsChange={
+            handleRequestCountsChange
+          }
+        />
+      </section>
 
       <section
         id="profile-requests"

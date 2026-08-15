@@ -1300,4 +1300,241 @@ export const translations = {
     en: "Assignment cancelled successfully.",
     ar: "تم إلغاء التعيين بنجاح."
   },
+  otherHospital: {
+    en:
+      "Other hospital (not listed)",
+    ar:
+      "مستشفى آخر (غير موجود في القائمة)",
+  },
+
+  customHospitalName: {
+    en:
+      "Hospital name",
+    ar:
+      "اسم المستشفى",
+  },
+
+  customHospitalAddress: {
+    en:
+      "Hospital address",
+    ar:
+      "عنوان المستشفى",
+  },
+
+  customHospitalNamePlaceholder: {
+    en:
+      "Enter the hospital name",
+    ar:
+      "أدخل اسم المستشفى",
+  },
+
+  customHospitalAddressPlaceholder: {
+    en:
+      "Enter the complete hospital address",
+    ar:
+      "أدخل العنوان الكامل للمستشفى",
+  },
+
+  customHospitalNotice: {
+    en:
+      "This hospital is not currently registered. Its information will be reviewed with the blood request and will not be added automatically to the hospital database.",
+    ar:
+      "هذا المستشفى غير مسجل حالياً. ستتم مراجعة معلوماته مع طلب الدم ولن تتم إضافته تلقائياً إلى قاعدة بيانات المستشفيات.",
+  },
+
+  registeredHospitalRequired: {
+    en:
+      "Please select a registered hospital or choose Other hospital.",
+    ar:
+      "يرجى اختيار مستشفى مسجل أو اختيار مستشفى آخر.",
+  },
+
+  customHospitalDetailsRequired: {
+    en:
+      "The hospital name and complete address are required.",
+    ar:
+      "اسم المستشفى والعنوان الكامل مطلوبان.",
+  },
+
+  invalidUnitsNeeded: {
+    en:
+      "The required units must be between 1 and 50.",
+    ar:
+      "يجب أن يكون عدد الوحدات المطلوبة بين 1 و50.",
+  },
+
+  requestSubmittedForApproval: {
+    en:
+      "Your blood request was submitted for administrator approval.",
+    ar:
+      "تم إرسال طلب الدم لموافقة المسؤول.",
+  },
+
+  requestSubmissionFailed: {
+    en:
+      "Failed to submit the blood request.",
+    ar:
+      "تعذر إرسال طلب الدم.",
+  },
+
+  requiredUnitsPlaceholder: {
+    en:
+      "Enter required units (1–50)",
+    ar:
+      "أدخل عدد الوحدات المطلوبة (1–50)",
+  },
+
+  completeRequiredFields: {
+    en:
+      "Complete all required fields before submitting.",
+    ar:
+      "أكمل جميع الحقول المطلوبة قبل الإرسال.",
+  },
+
+  transportationAvailability: {
+    en:
+      "Transportation availability",
+    ar:
+      "توفر المواصلات",
+  },
+
+  transportationAvailabilityDescription: {
+    en:
+      "Can transportation to the hospital be arranged for the donor?",
+    ar:
+      "هل يمكن تأمين المواصلات للمتبرع إلى المستشفى؟",
+  },
+
+  transportationAvailable: {
+    en:
+      "Transportation is available",
+    ar:
+      "المواصلات متوفرة",
+  },
+
+  transportationNotAvailable: {
+    en:
+      "Transportation is not available",
+    ar:
+      "المواصلات غير متوفرة",
+  },
+
+  transportationAvailableDetail: {
+    en:
+      "The requester can help arrange transportation to the hospital.",
+    ar:
+      "يمكن لطالب الدم المساعدة في تأمين المواصلات إلى المستشفى.",
+  },
+
+  transportationNotAvailableDetail: {
+    en:
+      "The donor must arrange their own transportation to the hospital.",
+    ar:
+      "يجب على المتبرع تأمين المواصلات إلى المستشفى.",
+  },
+
+  bloodRequestApprovals: {
+    en:
+      "Blood Request Approvals",
+    ar:
+      "الموافقة على طلبات الدم",
+  },
+
+  noPendingBloodRequests: {
+    en:
+      "No blood requests are awaiting approval.",
+    ar:
+      "لا توجد طلبات دم بانتظار الموافقة.",
+  },
+
+  requestApprovalsLoadFailed: {
+    en:
+      "Failed to load pending blood requests.",
+    ar:
+      "تعذر تحميل طلبات الدم المعلقة.",
+  },
+
+  requestApprovalActionFailed: {
+    en:
+      "Failed to process the blood request.",
+    ar:
+      "تعذرت معالجة طلب الدم.",
+  },
+
+  requestRejectionReasonPrompt: {
+    en:
+      "Enter the reason for rejecting this blood request:",
+    ar:
+      "أدخل سبب رفض طلب الدم:",
+  },
+
+  rejectionReasonRequired: {
+    en:
+      "A rejection reason is required.",
+    ar:
+      "سبب الرفض مطلوب.",
+  },
+
+  customHospitalRequiresReview: {
+    en:
+      "Custom hospital requires review",
+    ar:
+      "مستشفى مضاف يدوياً ويحتاج إلى المراجعة",
+  },
+
+  reviewAndAddHospital: {
+    en:
+      "Review and add hospital",
+    ar:
+      "مراجعة وإضافة المستشفى",
+  },
+
+  reviewCustomHospital: {
+    en:
+      "Review custom hospital",
+    ar:
+      "مراجعة المستشفى المضاف يدوياً",
+  },
+
+  requesterContactInformation: {
+    en:
+      "Requester contact information",
+    ar:
+      "معلومات التواصل مع طالب الدم",
+  },
+
+  pendingCustomHospitals: {
+    en:
+      "Hospitals Pending",
+    ar:
+      "المستشفيات المضافة",
+  },
+
+  noPendingCustomHospitals: {
+    en:
+      "No custom hospitals require completion.",
+    ar:
+      "لا توجد مستشفيات مضافة تحتاج إلى إكمال.",
+  },
+
+  requestsReadyForApproval: {
+    en:
+      "Requests Ready for Approval",
+    ar:
+      "طلبات جاهزة للموافقة",
+  },
+
+  noRequestsReadyForApproval: {
+    en:
+      "No blood requests are ready for approval.",
+    ar:
+      "لا توجد طلبات دم جاهزة للموافقة.",
+  },
+
+  allHospitalFieldsRequired: {
+    en:
+      "Hospital name, location, phone number and address are required.",
+    ar:
+      "اسم المستشفى والمنطقة ورقم الهاتف والعنوان مطلوبة.",
+  },
 };

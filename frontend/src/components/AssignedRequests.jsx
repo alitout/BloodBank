@@ -3,6 +3,7 @@ import { useAuth } from "./AuthContext.jsx";
 import { useLanguage } from "./LanguageContext.jsx";
 import { API_BASE_URL, getAccessToken } from "../utils/api.js";
 import { CheckCircle, XCircle, Calendar, MapPin, Droplet, AlertCircle } from "lucide-react";
+import { Truck01, } from "@untitledui/icons";
 
 export const AssignedRequests = () => {
   const { accessToken } = useAuth();
@@ -604,6 +605,7 @@ export const AssignedRequests = () => {
                   </div>
                 </div>
 
+
                 {/* Date */}
                 <div className="flex items-center gap-3">
                   <Calendar className="w-5 h-5 text-green-600" />
@@ -629,6 +631,39 @@ export const AssignedRequests = () => {
                     </p>
                   </div>
                 </div>
+
+                <div className="flex items-center gap-3">
+                  <Truck01
+                    className={`h-5 w-5 ${request
+                      .transportationAvailable ===
+                      true
+                      ? "text-red-600"
+                      : "text-slate-500"
+                      }`}
+                    aria-hidden="true"
+                  />
+
+                  <div>
+                    <p className="text-xs text-slate-600">
+                      {t(
+                        "transportationAvailability"
+                      )}
+                    </p>
+
+                    <p className="font-semibold text-slate-900">
+                      {request
+                        .transportationAvailable ===
+                        true
+                        ? t(
+                          "transportationAvailable"
+                        )
+                        : t(
+                          "transportationNotAvailable"
+                        )}
+                    </p>
+                  </div>
+                </div>
+
               </div>
 
               {/* Description */}
@@ -641,7 +676,8 @@ export const AssignedRequests = () => {
                 </div>
               )}
 
-              {/* Replace the old Confirm/Cancel block with this */}
+
+
               <div className="border-t border-slate-200 bg-white p-4">
                 {request.confirmationStatus === "pending_admin_approval" ? (
                   <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">

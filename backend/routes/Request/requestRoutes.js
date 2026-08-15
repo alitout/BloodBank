@@ -14,13 +14,16 @@ router.get('/notifications', verifyDonorToken, RequestController.getDonorNotific
 router.patch('/notifications/:notificationId/read', verifyDonorToken, RequestController.markNotificationAsRead);
 
 router.get('/all-donations', verifyAdminToken, RequestController.getAllDonations);
+router.get("/admin/pending-approval", verifyAdminToken, RequestController.getPendingRequestApprovals);
+router.patch("/admin/:id/approve", verifyAdminToken, RequestController.approveRequest);
+router.patch("/admin/:id/reject", verifyAdminToken, RequestController.rejectRequest);
+router.post("/admin/:id/register-custom-hospital", verifyAdminToken, RequestController.registerCustomHospital);
+router.get('/my-requests', verifyAccessToken, RequestController.getMyRequests);
 router.get('/:id', verifyDonorOrAdminToken, RequestController.getRequesterById);
-router.patch('/:id', verifyAccessToken, RequestController.updateRequester);
+router.patch("/:id", verifyAdminToken, RequestController.updateRequester);
+router.delete("/:id", verifyAdminToken, RequestController.deleteRequester);
 router.patch('/:id/assign', verifyAdminToken, RequestController.assignRequestToDonor);
 router.post('/:id/assign-self', verifyVerifiedDonorToken, RequestController.assignSelfToRequest);
 router.patch('/:id/cancel-assignment', verifyVerifiedDonorToken, RequestController.cancelAssignment);
-router.delete('/:id', verifyAccessToken, RequestController.deleteRequester);
-
-router.get('/my-requests', verifyAccessToken, RequestController.getMyRequests);
 
 export default router;

@@ -23,13 +23,11 @@ const DBContext = createContext(undefined);
 
 export const DBProvider = ({ children }) => {
   const { user, accessToken, isLoading: authLoading } = useAuth();
-
   const [requesters, setRequesters] = useState([]);
   const [donors, setDonors] = useState([]);
   const [hospitals, setHospitals] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [alerts, setAlerts] = useState([]);
-
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -49,12 +47,7 @@ export const DBProvider = ({ children }) => {
         role: user.role,
       });
 
-      const [
-        reqResult,
-        hospResult,
-        aptResult,
-        alertResult,
-      ] = await Promise.all([
+      const [reqResult, hospResult, aptResult, alertResult,] = await Promise.all([
         requesterAPI.getAll(),
         hospitalAPI.getAll(),
         appointmentAPI.getAll(),
@@ -173,35 +166,61 @@ export const DBProvider = ({ children }) => {
   };
 
   // Add new blood request
-  const addRequester = async (fname, fatherName, lname, bloodGenre, bloodType, hospital, unitsNeeded, date, description, relationToPatient) => {
-    try {
-      setError(null);
-      //console.log('\n🚀 [DB] Creating blood request...');
+  const addRequester =
+    async (requestData) => {
+      try {
+        setError(null);
 
-      const payload = { fname, fatherName, lname, bloodGenre, bloodType, hospital, unitsNeeded, date, description, relationToPatient };
-      const result = await requesterAPI.create(payload);
+        if (
+          !requestData ||
+          typeof requestData !==
+          "object"
+        ) {
+          throw new Error(
+            "Invalid request data"
+          );
+        }
 
-      if (result.success && result.data) {
-        const requester =
-          result.data.requester ||
-          result.data;
+        const result =
+          await requesterAPI.create(
+            requestData
+          );
 
-        setRequesters((previous) => [
-          requester,
-          ...previous
-        ]);
+        if (
+          result.success &&
+          result.data
+        ) {
+          const requester =
+            result.data.requester ||
+            result.data;
 
-        return requester;
-      } else {
-        throw new Error(result.error || 'Failed to create request');
+          setRequesters(
+            (previous) => [
+              requester,
+              ...previous,
+            ]
+          );
+
+          return requester;
+        }
+
+        throw new Error(
+          result.error ||
+          "Failed to create request"
+        );
+      } catch (requestError) {
+        console.error(
+          "[DB] Error creating request:",
+          requestError
+        );
+
+        setError(
+          requestError.message
+        );
+
+        throw requestError;
       }
-    } catch (e) {
-      const msg = `Error creating request: ${e.message}`;
-      console.error('❌ [DB]', msg);
-      setError(msg);
-      throw e;
-    }
-  };
+    };
 
   // Update blood request status
   const updateRequesterStatus = async (id, status) => {
@@ -326,6 +345,51 @@ export const DBProvider = ({ children }) => {
     }
   };
 
+  const refreshRequesters =
+    useCallback(async () => {
+      if (
+        !user ||
+        !accessToken
+      ) {
+        return [];
+      }
+
+      try {
+        const result =
+          await requesterAPI.getAll();
+
+        if (!result.success) {
+          throw new Error(
+            result.error ||
+            "Failed to refresh requests"
+          );
+        }
+
+        const receivedRequests =
+          Array.isArray(result.data)
+            ? result.data
+            : [];
+
+        setRequesters(
+          receivedRequests
+        );
+
+        return receivedRequests;
+      } catch (
+      refreshError
+      ) {
+        console.error(
+          "[DB] Silent request refresh failed:",
+          refreshError
+        );
+
+        return [];
+      }
+    }, [
+      user,
+      accessToken,
+    ]);
+
   return (
     <DBContext.Provider value={{
       requesters,
@@ -340,6 +404,7 @@ export const DBProvider = ({ children }) => {
       deleteRequester,
       scheduleAppointment,
       refreshData,
+      refreshRequesters,
       fetchAdminData,
       addHospital
     }}>
