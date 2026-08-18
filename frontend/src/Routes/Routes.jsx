@@ -262,6 +262,15 @@ const Routes = () => {
         />
       ),
     },
+    {
+      path: "/my-requests",
+      element: (
+        <Navigate
+          to="/dashboard?tab=my-requests"
+          replace
+        />
+      ),
+    },
 
     {
       path: "*",

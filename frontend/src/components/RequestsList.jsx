@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { useLanguage } from "./LanguageContext.jsx";
 import { useAuth } from "./AuthContext.jsx";
 import { useDB } from "./DBContext.jsx";
@@ -11,6 +12,7 @@ import { Truck01, } from "@untitledui/icons";
 
 export const RequestsList = () => {
   const { t, language } = useLanguage();
+  const location = useLocation();
   const { accessToken, user, refreshUserProfile } = useAuth();
   const { requesters, refreshRequesters } = useDB();
   const { getCachedData } = useDataCache();
@@ -539,7 +541,13 @@ export const RequestsList = () => {
                         type="button"
                         onClick={() =>
                           navigate(
-                            `/request-detail/${requestId}`
+                            `/request-detail/${requestId}`,
+                            {
+                              state: {
+                                from:
+                                  `${location.pathname}${location.search}`,
+                              },
+                            }
                           )
                         }
                         className="flex-1 py-2 px-3 rounded-lg font-semibold text-sm transition flex items-center justify-center gap-2 bg-blue-500 text-white hover:bg-blue-600 active:scale-95"

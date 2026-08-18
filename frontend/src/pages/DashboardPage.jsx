@@ -9,6 +9,8 @@ import { RequestsList } from "../components/RequestsList.jsx";
 import { AssignedRequests } from "../components/AssignedRequests.jsx";
 import { DonationHistory } from "../components/DonationHistory.jsx";
 import { DonorProfilePage } from "./DonorProfilePage.jsx";
+import MyRequests from "../components/MyRequests.jsx";
+import { Building07, ClockRewind, Droplets01, File02, FileCheck02, HeartHand, User01, } from "@untitledui/icons";
 
 export default function DashboardPage() {
   const { t, language } = useLanguage();
@@ -20,23 +22,24 @@ export default function DashboardPage() {
   // Build tabs based on user role
   const getTabs = () => {
     const commonTabs = [
-      { id: "seek-blood", label: language === "ar" ? "طلب دم" : "Request Blood", icon: "🩸" },
-      { id: "hospitals", label: language === "ar" ? "المستشفيات" : "Hospitals", icon: "🏥" }
+      { id: "seek-blood", label: language === "ar" ? "طلب دم" : "Request Blood", icon: Droplets01, },
+      { id: "hospitals", label: language === "ar" ? "المستشفيات" : "Hospitals", icon: Building07, },
     ];
 
     const donorTabs = [
-      { id: "assigned", label: language === "ar" ? "الطلبات المعينة" : "Assigned Requests", icon: "✓" },
-      { id: "requests", label: language === "ar" ? "الطلبات" : "Requests", icon: "❤️" },
-      { id: "history", label: language === "ar" ? "سجل تبرعاتي" : "History", icon: "🏆" },
-      { id: "profile", label: language === "ar" ? "ملفي الشخصي" : "Profile", icon: "👤" }
+      { id: "assigned", label: language === "ar" ? "الطلبات المعينة" : "Assigned Requests", icon: FileCheck02, },
+      { id: "requests", label: language === "ar" ? "الطلبات" : "Requests", icon: HeartHand, },
+      { id: "my-requests", label: language === "ar" ? "طلباتي" : "My Requests", icon: File02, },
+      { id: "history", label: language === "ar" ? "سجل تبرعاتي" : "History", icon: ClockRewind, },
+      { id: "profile", label: language === "ar" ? "ملفي الشخصي" : "Profile", icon: User01, },
     ];
 
-    let tabs = commonTabs;
-    if (user?.role === "donor") {
-      tabs = [...donorTabs, ...commonTabs];
-    }
-
-    return tabs;
+    return user?.role === "donor"
+      ? [
+        ...donorTabs,
+        ...commonTabs,
+      ]
+      : commonTabs;
   };
 
   const tabs = getTabs();
@@ -84,12 +87,32 @@ export default function DashboardPage() {
             : "bg-slate-100 text-slate-700 hover:bg-slate-200"
             }`}
         >
-          <span>{tab.icon}</span>
+          {React.createElement(
+            tab.icon,
+            {
+              className:
+                "h-5 w-5 shrink-0",
+            }
+          )}
           {tab.label}
         </button>
       ))}
     </div>
   );
+
+  const handleRequestCreated =
+    () => {
+      setSearchParams({
+        tab:
+          "my-requests",
+      });
+
+      window.dispatchEvent(
+        new CustomEvent(
+          "donor-request-updated"
+        )
+      );
+    };
 
   return (
     <AppLayout mobileMenu={MobileMenu}>
@@ -120,7 +143,13 @@ export default function DashboardPage() {
                 : "text-slate-600 hover:text-slate-900"
                 }`}
             >
-              <span>{tab.icon}</span>
+              {React.createElement(
+                tab.icon,
+                {
+                  className:
+                    "h-5 w-5 shrink-0",
+                }
+              )}
               {tab.label}
             </button>
           ))}
@@ -131,11 +160,12 @@ export default function DashboardPage() {
           {/* Donor-specific tabs */}
           {activeTab === "assigned" && <AssignedRequests />}
           {activeTab === "requests" && <RequestsList />}
+          {activeTab === "my-requests" && <MyRequests />}
           {activeTab === "history" && <DonationHistory />}
           {activeTab === "profile" && <DonorProfilePage />}
 
           {/* Common tabs */}
-          {activeTab === "seek-blood" && <NewRequestForm />}
+          {activeTab === "seek-blood" && (<NewRequestForm onSuccess={handleRequestCreated} />)}
           {activeTab === "hospitals" && <PortalHospital user={user} />}
         </div>
       </div>

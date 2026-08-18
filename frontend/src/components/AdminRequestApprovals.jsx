@@ -81,13 +81,13 @@ export const AdminRequestApprovals = ({
     useEffect(() => {
         onCountsChange?.({
             requests:
-                requests.length,
+                requestsReadyForApproval.length,
 
             hospitals:
                 customHospitalRequests.length,
         });
     }, [
-        requests.length,
+        requestsReadyForApproval.length,
         customHospitalRequests.length,
         onCountsChange,
     ]);

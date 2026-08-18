@@ -5,7 +5,7 @@ import { verifyAccessToken, verifyAdminToken, verifyDonorToken, verifyDonorOrAdm
 const router = express.Router();
 
 router.get('/', verifyAccessToken, RequestController.getAllRequesters);
-router.post('/', verifyAccessToken, RequestController.createRequester);
+router.post('/', verifyVerifiedDonorToken, RequestController.createRequester);
 
 router.get('/available-requests', verifyDonorToken, RequestController.getAvailableRequests);
 router.get('/assigned-requests', verifyDonorToken, RequestController.getAssignedRequests);
@@ -18,7 +18,7 @@ router.get("/admin/pending-approval", verifyAdminToken, RequestController.getPen
 router.patch("/admin/:id/approve", verifyAdminToken, RequestController.approveRequest);
 router.patch("/admin/:id/reject", verifyAdminToken, RequestController.rejectRequest);
 router.post("/admin/:id/register-custom-hospital", verifyAdminToken, RequestController.registerCustomHospital);
-router.get('/my-requests', verifyAccessToken, RequestController.getMyRequests);
+router.get('/my-requests', verifyDonorToken, RequestController.getMyRequests);
 router.get('/:id', verifyDonorOrAdminToken, RequestController.getRequesterById);
 router.patch("/:id", verifyAdminToken, RequestController.updateRequester);
 router.delete("/:id", verifyAdminToken, RequestController.deleteRequester);

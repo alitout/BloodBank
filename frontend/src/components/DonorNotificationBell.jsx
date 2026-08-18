@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Bell, X, CheckCircle } from "lucide-react";
 import { useLanguage } from "./LanguageContext.jsx";
-import { useNavigate } from "react-router-dom";
 
 export const DonorNotificationBell = ({ isMobilePanel = false, notificationData }) => {
   const { language } = useLanguage();
   const navigate = useNavigate();
+  const location = useLocation();
   const [showNotifications, setShowNotifications] = useState(isMobilePanel);
   const [activeTab, setActiveTab] = useState("unread");
   const bellRef = useRef(null);
@@ -49,7 +50,15 @@ export const DonorNotificationBell = ({ isMobilePanel = false, notificationData 
 
       // Navigate
       if (requestId) {
-        navigate(`/request-detail/${requestId}`);
+        navigate(
+          `/request-detail/${requestId}`,
+          {
+            state: {
+              from:
+                `${location.pathname}${location.search}`,
+            },
+          }
+        );
       }
 
       // Optional: close dropdown after clicking

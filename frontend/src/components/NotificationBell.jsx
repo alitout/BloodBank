@@ -377,7 +377,7 @@ export const NotificationBell = ({ isMobilePanel = false, notificationData }) =>
                 type="button"
                 onClick={() =>
                   openPendingSection(
-                    "custom-hospitals"
+                    "pending-custom-hospitals"
                   )
                 }
                 className="w-full p-4 text-left hover:bg-slate-50"
@@ -444,7 +444,7 @@ export const NotificationBell = ({ isMobilePanel = false, notificationData }) =>
                 </div>
               </button>
             )}
-            
+
             {/* Pending profile update/deletion requests */}
             {pendingProfileRequests.length > 0 && (
               <button

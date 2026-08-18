@@ -1537,4 +1537,89 @@ export const translations = {
     ar:
       "اسم المستشفى والمنطقة ورقم الهاتف والعنوان مطلوبة.",
   },
+
+  myBloodRequests: {
+    en: "My Blood Requests",
+    ar: "طلبات الدم الخاصة بي",
+  },
+
+  myBloodRequestsDescription: {
+    en: "Follow the approval and completion status of the blood requests you created.",
+    ar: "تابع حالة الموافقة والتنفيذ لطلبات الدم التي أنشأتها.",
+  },
+
+  requestCount: {
+    en: "request(s)",
+    ar: "طلب",
+  },
+
+  noMyBloodRequests: {
+    en: "You have not created any blood requests.",
+    ar: "لم تقم بإنشاء أي طلب دم.",
+  },
+
+  noMyBloodRequestsDescription: {
+    en: "Requests you create will appear here with their approval status.",
+    ar: "ستظهر هنا الطلبات التي تنشئها مع حالة الموافقة عليها.",
+  },
+
+  myRequestsLoadFailed: {
+    en: "Failed to load your blood requests.",
+    ar: "تعذر تحميل طلبات الدم الخاصة بك.",
+  },
+
+  awaitingAdminApproval: {
+    en: "Awaiting administrator approval",
+    ar: "بانتظار موافقة المسؤول",
+  },
+
+  requestApproved: {
+    en: "Request approved",
+    ar: "تمت الموافقة على الطلب",
+  },
+
+  requestRejected: {
+    en: "Request rejected",
+    ar: "تم رفض الطلب",
+  },
+
+  waitingForHospitalReview: {
+    en: "The custom hospital must be reviewed and completed before the request can be approved.",
+    ar: "يجب مراجعة بيانات المستشفى المضاف واستكمالها قبل الموافقة على الطلب.",
+  },
+
+  waitingForRequestApproval: {
+    en: "This request is waiting for administrator approval and is not visible to donors yet.",
+    ar: "هذا الطلب بانتظار موافقة المسؤول ولم يظهر للمتبرعين بعد.",
+  },
+
+  viewRequestDetails: {
+    en: "View request details",
+    ar: "عرض تفاصيل الطلب",
+  },
+
+  previous: {
+    en: "Previous",
+    ar: "السابق",
+  },
+
+  next: {
+    en: "Next",
+    ar: "التالي",
+  },
+
+  retry: {
+    en: "Retry",
+    ar: "إعادة المحاولة",
+  },
+
+  approved: {
+    en: "Approved",
+    ar: "موافق عليه",
+  },
+
+  rejected: {
+    en: "Rejected",
+    ar: "مرفوض",
+  },
 };

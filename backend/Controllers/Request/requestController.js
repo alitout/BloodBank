@@ -328,69 +328,95 @@ const createRequester =
     }
   };
 
-const getMyRequests = async (
-  req,
-  res
-) => {
-  try {
-    const page =
-      Math.max(
-        Number(req.query.page) || 1,
-        1
-      );
+const getMyRequests =
+  async (req, res) => {
+    try {
+      const userUid =
+        req.user?.uid;
 
-    const limit =
-      Math.min(
+      if (!userUid) {
+        return res.status(401).json({
+          error:
+            "Authentication required",
+        });
+      }
+
+      const page =
         Math.max(
-          Number(req.query.limit) || 20,
+          Number.parseInt(
+            req.query.page,
+            10
+          ) || 1,
           1
-        ),
-        100
+        );
+
+      const limit =
+        Math.min(
+          Math.max(
+            Number.parseInt(
+              req.query.limit,
+              10
+            ) || 12,
+            1
+          ),
+          50
+        );
+
+      const query = {
+        createdByUid:
+          userUid,
+      };
+
+      const [
+        requests,
+        total,
+      ] =
+        await Promise.all([
+          Requester.find(query)
+            .sort({
+              createdAt: -1,
+            })
+            .skip(
+              (page - 1) *
+              limit
+            )
+            .limit(limit)
+            .lean(),
+
+          Requester.countDocuments(
+            query
+          ),
+        ]);
+
+      return res.json({
+        requests:
+          Array.isArray(requests)
+            ? requests
+            : [],
+
+        total,
+        page,
+
+        pages:
+          Math.max(
+            1,
+            Math.ceil(
+              total / limit
+            )
+          ),
+      });
+    } catch (error) {
+      console.error(
+        "[MY REQUESTS] Fetch error:",
+        error
       );
 
-    const query = {
-      createdByUid:
-        req.user.uid,
-    };
-
-    const [
-      requests,
-      total,
-    ] =
-      await Promise.all([
-        Requester.find(query)
-          .sort({
-            createdAt: -1,
-          })
-          .skip(
-            (page - 1) *
-            limit
-          )
-          .limit(limit)
-          .lean(),
-
-        Requester.countDocuments(
-          query
-        ),
-      ]);
-
-    res.json({
-      requests,
-      total,
-      page,
-      pages:
-        Math.ceil(
-          total / limit
-        ),
-    });
-
-  } catch (error) {
-    res.status(500).json({
-      error:
-        "Failed to fetch your requests",
-    });
-  }
-};
+      return res.status(500).json({
+        error:
+          "Failed to fetch your blood requests",
+      });
+    }
+  };
 
 // Update blood request
 const updateRequester =

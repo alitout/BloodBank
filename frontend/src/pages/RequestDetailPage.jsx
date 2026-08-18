@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams, } from "react-router-dom";
 import { useAuth } from "../components/AuthContext.jsx";
 import { useLanguage } from "../components/LanguageContext.jsx";
 import { API_BASE_URL, getAccessToken } from "../utils/api.js";
@@ -13,6 +13,7 @@ export const RequestDetailPage =
   () => {
     const { requestId } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
     const { t, language } = useLanguage();
     const { user, accessToken, refreshUserProfile, } = useAuth();
     const [request, setRequest,] = useState(null);
@@ -22,6 +23,64 @@ export const RequestDetailPage =
     const [assigned, setAssigned,] = useState(false);
     const [showUnitsModal, setShowUnitsModal,] = useState(false);
     const [unitsToAssign, setUnitsToAssign,] = useState(1);
+
+    const handleBack = () => {
+      const previousPath =
+        location.state?.from;
+
+      const currentPath =
+        `${location.pathname}${location.search}`;
+
+      /*
+       * Prefer the source explicitly supplied
+       * by the request card or notification.
+       */
+      if (
+        typeof previousPath === "string" &&
+        previousPath.startsWith("/") &&
+        previousPath !== currentPath
+      ) {
+        navigate(
+          previousPath,
+          {
+            replace: true,
+          }
+        );
+
+        return;
+      }
+
+      /*
+       * Return through browser history when the
+       * details page was reached from inside the app.
+       */
+      const historyIndex =
+        window.history.state?.idx;
+
+      if (
+        Number.isInteger(historyIndex) &&
+        historyIndex > 0
+      ) {
+        navigate(-1);
+        return;
+      }
+
+      /*
+       * Safe fallback for directly opened links.
+       */
+      const isRequestOwner =
+        request?.createdByUid ===
+        user?.uid;
+
+      navigate(
+        isRequestOwner
+          ? "/dashboard?tab=my-requests"
+          : "/dashboard?tab=requests",
+        {
+          replace: true,
+        }
+      );
+    };
 
     /*
      * Refresh current user when page opens.
@@ -335,14 +394,7 @@ export const RequestDetailPage =
             <div className="mb-6 flex items-center justify-between gap-4">
               <button
                 type="button"
-                onClick={() =>
-                  navigate(
-                    "/dashboard?tab=requests",
-                    {
-                      replace: true,
-                    }
-                  )
-                }
+                onClick={handleBack}
                 className="flex items-center gap-2 font-semibold text-blue-600 hover:text-blue-700"
               >
                 <ArrowLeft size={20} />
@@ -384,14 +436,7 @@ export const RequestDetailPage =
           <div className="mb-6 flex items-center justify-between gap-4">
             <button
               type="button"
-              onClick={() =>
-                navigate(
-                  "/dashboard?tab=requests",
-                  {
-                    replace: true,
-                  }
-                )
-              }
+              onClick={handleBack}
               className="flex items-center gap-2 font-semibold text-blue-600 hover:text-blue-700"
             >
               <ArrowLeft size={20} />
